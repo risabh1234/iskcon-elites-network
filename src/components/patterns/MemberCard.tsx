@@ -13,6 +13,11 @@ export interface MemberCardProps {
   tags?: string[];
   /** Admin-only signal; omit on public surfaces. */
   status?: 'pending' | 'approved' | 'rejected';
+  /**
+   * Reserved for the shared-element morph into the profile hero. Inert until
+   * React ships <ViewTransition> in a stable release — see ADR-0031.
+   */
+  transitionName?: string;
   className?: string;
 }
 
@@ -34,6 +39,7 @@ export function MemberCard({
   avatarUrl,
   tags,
   status,
+  transitionName,
   className,
 }: MemberCardProps) {
   return (
@@ -48,7 +54,13 @@ export function MemberCard({
       )}
     >
       <div className="flex items-start gap-[var(--spacing-4)]">
-        <Avatar name={name} src={avatarUrl} size="lg" shape="square" />
+        <Avatar
+          name={name}
+          src={avatarUrl}
+          size="lg"
+          shape="square"
+          style={transitionName ? ({ viewTransitionName: transitionName } as React.CSSProperties) : undefined}
+        />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-[var(--spacing-2)]">

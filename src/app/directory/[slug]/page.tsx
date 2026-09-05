@@ -68,7 +68,10 @@ export default async function MemberProfilePage({ params }: Props) {
       <article className="grid gap-[var(--spacing-8)] lg:grid-cols-[18rem_1fr]">
         <header className="lg:sticky lg:top-[var(--spacing-8)] lg:self-start">
           {/* 4:5 is the portrait crop the register standardises on. */}
-          <div className="aspect-4/5 w-full max-w-[18rem] overflow-hidden rounded-sm border border-line bg-paper-sunken">
+          <div
+            className="aspect-4/5 w-full max-w-[18rem] overflow-hidden rounded-sm border border-line bg-paper-sunken"
+            style={{ viewTransitionName: `portrait-${member.slug}` } as React.CSSProperties}
+          >
             {member.avatarUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img

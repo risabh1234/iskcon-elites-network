@@ -4,6 +4,8 @@ import { err, ok, type Result } from '@/server/result';
 import { invalidate, tags } from '@/server/cache';
 import { uniqueSlug } from '@/lib/slug';
 import { record as audit } from '@/domain/audit/service';
+import { entryApprovedEmail, entryRejectedEmail } from '@/server/email/render';
+import { sendQuietly } from '@/server/email/send';
 import * as repo from './repository';
 import { toMemberDto, toSearchDto, type MemberDto, type MemberSearchDto } from './dto';
 import {
@@ -271,6 +273,18 @@ export async function setMemberApproval(
       before: { status: existing.status },
       after: { status: nextStatus, reason: parsed.data.reason ?? null },
     });
+
+    // Told, not left to notice. A rejection always carries its reason — a
+    // decision the person cannot act on is not a decision they can answer.
+    await sendQuietly(
+      existing.email,
+      parsed.data.isApproved
+        ? entryApprovedEmail({ name: existing.legalName, slug: existing.slug })
+        : entryRejectedEmail({
+            name: existing.legalName,
+            reason: parsed.data.reason ?? 'No reason was recorded.',
+          }),
+    );
 
     invalidate(tags.members(), tags.member(id));
     return ok(undefined);

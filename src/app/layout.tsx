@@ -3,6 +3,7 @@ import './globals.css';
 import { fontVariables } from './fonts';
 import Header from '@/components/layout/Header';
 import { getActor } from '@/server/auth';
+import { BRAND } from '@/lib/site';
 import Footer from '@/components/layout/Footer';
 
 const SITE_NAME = 'ISKCON Elites Network';
@@ -47,9 +48,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // Browser chrome is set from JS, not CSS, so this is the one place a colour
-  // cannot come from a token. Must mirror --color-paper.
-  themeColor: '#FAF9F7', // design-literal-allow
+  themeColor: BRAND.paper,
   colorScheme: 'light',
 };
 

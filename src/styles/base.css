@@ -227,6 +227,14 @@
       scroll-behavior: auto;
     }
 
+    /* View transitions are not covered by the * selector: they animate
+       pseudo-elements on the document, so they need cancelling by name. */
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none !important;
+    }
+
     *,
     *::before,
     *::after {
@@ -259,9 +267,111 @@
 @keyframes slide-in-up     { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes slide-out-down  { from { transform: translateY(0); } to { transform: translateY(100%); } }
 
+/* A short lift, used to bring a list in. Small on purpose: the movement is
+   there to say "these arrived", not to be watched. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(var(--spacing-2)); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── View transitions ─────────────────────────────────────────────────────
+   Durations come from the same scale as everything else, so a navigation
+   cannot quietly become slower than a dialog. */
+::view-transition-group(*) {
+  animation-duration: var(--dur-normal);
+  animation-timing-function: var(--ease-emphasised);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-fast);
+}
+
+/* ── Print ────────────────────────────────────────────────────────────────
+   A member profile is the page people actually print — to take into a meeting,
+   or to file. Chrome goes, links reveal their destinations, and the type moves
+   to a size that reads on paper rather than on a screen. */
+@media print {
+  header,
+  footer,
+  nav,
+  .skip-link,
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  html {
+    font-size: 11pt;
+  }
+
+  body {
+    background: #fff; /* design-literal-allow: paper is white; ink is expensive */
+    color: #000; /* design-literal-allow */
+  }
+
+  main {
+    max-inline-size: none;
+    padding: 0;
+  }
+
+  /* A printed link is useless without its destination. */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+
+  /* Internal links are relative, so the origin would be missing anyway. */
+  a[href^="/"]::after {
+    content: "";
+  }
+
+  h1, h2, h3 {
+    break-after: avoid;
+  }
+
+  img, figure, blockquote, table {
+    break-inside: avoid;
+  }
+}
+
 @layer utilities {
   /* `sr-only` is Tailwind's; redefining it here would only be a second copy to
      keep in sync. Only what Tailwind does not provide lives below. */
+
+  /*
+   * Staggered entrance for a list. Applied to the container; each child takes
+   * its index from `--i`, capped so a long list does not end in a long wait.
+   */
+  .stagger > * {
+    animation: var(--animate-rise);
+    animation-delay: calc(min(var(--i, 0), var(--stagger-max)) * var(--stagger-step));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stagger > * {
+      animation: none;
+    }
+  }
+
+  /*
+   * WCAG 2.5.5: a touch target should be at least 44px. Applied by opting in
+   * rather than globally, because inflating every control in a dense admin
+   * table would cost more than it buys — this is for controls that stand alone
+   * on a touch surface.
+   */
+  .touch-target {
+    position: relative;
+  }
+
+  .touch-target::after {
+    content: "";
+    position: absolute;
+    inset: 50%;
+    inline-size: max(100%, 44px); /* design-literal-allow: WCAG 2.5.5 minimum */
+    block-size: max(100%, 44px); /* design-literal-allow */
+    translate: -50% -50%;
+  }
 
   /* Skip link: off-screen until focused, then anchored top-left. */
   .skip-link {

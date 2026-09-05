@@ -27,8 +27,14 @@ for (const route of targets) {
   const url = `${BASE}${route}`;
 
   const response = await page.goto(url, { waitUntil: 'networkidle' });
-  if (!response || !response.ok()) {
-    console.error(`✖ ${route} — HTTP ${response?.status() ?? 'no response'}`);
+  const status = response?.status() ?? 0;
+
+  // A 404 or a 403 still renders a page, and those pages need auditing as much
+  // as any other — arguably more, since they are what people meet when
+  // something has already gone wrong. Only a server error or no response at all
+  // means there is nothing to scan.
+  if (!response || status >= 500) {
+    console.error(`✖ ${route} — HTTP ${status || 'no response'}`);
     failures += 1;
     await page.close();
     continue;
@@ -39,7 +45,7 @@ for (const route of targets) {
     .analyze();
 
   if (violations.length === 0) {
-    console.log(`✔ ${route} — no violations`);
+    console.log(`✔ ${route} — no violations${status === 200 ? '' : ` (HTTP ${status})`}`);
   } else {
     failures += violations.length;
     console.error(`\n✖ ${route} — ${violations.length} violation(s)\n`);

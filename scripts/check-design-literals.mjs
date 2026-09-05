@@ -109,6 +109,7 @@ function walk(dir, out = []) {
 
 const violations = [];
 let skipped = 0;
+let exempted = 0;
 
 for (const file of walk(SCAN_DIR)) {
   const rel = relative(ROOT, file).split('\\').join('/');
@@ -118,15 +119,49 @@ for (const file of walk(SCAN_DIR)) {
     continue;
   }
 
-  const lines = readFileSync(file, 'utf8').split('\n');
+  const source = readFileSync(file, 'utf8');
+
+  // A whole-file opt-out, for media that cannot reference a stylesheet at all.
+  // Distinct from the (now empty) legacy list: that was debt, this is a
+  // permanent property of the output format. The marker must carry a reason.
+  // `[ \t]` rather than `\s`: the latter matches a newline, so a bare marker
+  // would greedily adopt the first word of the following line as its reason.
+  if (/design-literal-allow-file:[ \t]+\S/.test(source)) {
+    exempted += 1;
+    continue;
+  }
+
+  const lines = source.split('\n');
+
+  // Multi-line block comments are tracked across lines: CSS documents itself in
+  // them, and prose about the rules is not a use of the rules.
+  let inBlockComment = false;
 
   lines.forEach((line, i) => {
     if (line.includes('design-literal-allow')) return;
 
-    // Strip single-line comments and any trailing `//` remainder. Block
-    // comments spanning several lines are not tracked — a value hidden in one
-    // is a rare enough case to accept the miss rather than write a parser.
-    const code = line.replace(/\/\*.*?\*\//g, '').split('//')[0] ?? '';
+    let code = line;
+
+    if (inBlockComment) {
+      const close = code.indexOf('*/');
+      if (close === -1) {
+        code = '';
+      } else {
+        code = code.slice(close + 2);
+        inBlockComment = false;
+      }
+    }
+
+    // Strip complete block comments, then note an unterminated one.
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '');
+    const open = code.lastIndexOf('/*');
+    if (open !== -1) {
+      code = code.slice(0, open);
+      inBlockComment = true;
+    }
+
+    // Line comments run to the end of the line.
+    code = code.split('//')[0] ?? '';
 
     for (const rule of RULES) {
       const subject = rule.codeOnly ? code : line;
@@ -156,4 +191,7 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`✔ no design literals outside tokens.css (${skipped} legacy files skipped, see scripts/check-design-literals.mjs)`);
+console.log(
+  `✔ no design literals outside tokens.css ` +
+    `(${skipped} legacy files skipped, ${exempted} format-exempt)`,
+);

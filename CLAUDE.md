@@ -195,6 +195,21 @@ breadcrumb, ⌘K palette. Rules that hold here:
 
 `npm run e2e` runs the Playwright specs proving the console refuses everyone who is not a reviewer.
 
+## Craft rules
+
+- **Motion** comes from tokens: `--dur-*`, `--ease-*`, `--animate-*`. Nothing over 320ms. The
+  `.stagger` utility takes `--i` per child and caps the delay at eight items. Reduced-motion
+  removes animation, including `::view-transition-*`, which the `*` selector does not reach.
+- **SEO** is generated, never hand-maintained: `sitemap.ts`, `robots.ts`, `opengraph-image.tsx`,
+  `icon.tsx`, `manifest.ts`. The sitemap is built **as an anonymous reader** so it can only ever
+  contain what a stranger may see.
+- **Colours outside CSS** (OG images, manifest, theme colour) come from `BRAND` in `src/lib/site.ts`
+  — the one permitted duplication, each value marked as mirroring a token.
+- **Email** lives in `src/server/email/`. Inline styles only; escape everything; `sendQuietly` never
+  fails the action that triggered it.
+- `npm run check:a11y <routes…>` audits any route, including 404 and error pages — those are what
+  people meet when something has already gone wrong.
+
 ## Data model
 
 One `Member` table with a `kind` enum — `Alumnus` and `Speaker` are gone. Key rules:

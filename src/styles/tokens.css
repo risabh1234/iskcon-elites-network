@@ -168,6 +168,13 @@
   --animate-slide-out-left:  slide-out-left  var(--dur-fast)    var(--ease-exit);
   --animate-slide-in-up:     slide-in-up     var(--dur-normal)  var(--ease-emphasised);
   --animate-slide-out-down:  slide-out-down  var(--dur-fast)    var(--ease-exit);
+  --animate-rise:            rise            var(--dur-normal)  var(--ease-emphasised) both;
+
+  /* Stagger. 20ms between items, and the delay stops climbing after the
+     eighth — beyond that the last card waits long enough to read as a fault
+     rather than as sequence. */
+  --stagger-step: 20ms;
+  --stagger-max:  8;
 
   /* ── Breakpoints ─────────────────────────────────────────────────────────
      A real scale, restored (ADR-0010). The previous globals.css pinned all

@@ -365,3 +365,54 @@ questions — "the last 7 days", "how many are upcoming" — now belong to servi
 `withinDays`, `countEvents`), which are already the layer that talks to the outside world. The cost
 is one more service function per question; the benefit is that a page is a pure function of its
 inputs, which is what makes it cacheable and testable.
+
+## ADR-0031 — Shared-element transitions wait for React to ship them
+**Date:** 2026-09-06 · **Status:** Accepted
+
+The plan asks for View Transitions on route changes, and the strongest use here is morphing a
+member's portrait from the directory card into the profile hero — the reader sees that the page
+they landed on is the person they clicked. React's `<ViewTransition>` is the component that does
+this, and it is **not** exported by React 19.2.4; it ships only in canary builds. Pinning this
+project's React to a canary release for an animation is a bad trade: it moves the whole runtime onto
+an unstable channel to buy one effect.
+
+What ships instead is the CSS half — `view-transition-name` is set on both the card portrait and the
+profile hero, and `::view-transition-*` durations come from the motion tokens — so the morph is one
+import away the day React makes the component stable. The staggered list entrance and the dialog and
+sheet animations are unaffected and work today.
+
+## ADR-0032 — The design-literal check gained a file-level exemption
+**Date:** 2026-09-06 · **Status:** Accepted
+
+Transactional email must carry inline pixel values on every element: no mail client resolves CSS
+custom properties and several ignore `rem`, so the tokens physically cannot reach that output.
+Thirteen per-line markers would have been noise, and re-opening the legacy allowlist would have
+confused two different things — that list was *debt*, and this is a permanent property of the
+medium. `design-literal-allow-file:` takes a required reason on the same line; a bare marker does
+not exempt anything. The checker also now tracks multi-line block comments, because CSS documents
+itself in them and prose *about* the rules kept being flagged as a breach of them.
+
+## ADR-0033 — Generated images and manifests read BRAND, not tokens
+**Date:** 2026-09-06 · **Status:** Accepted
+
+OG cards, favicons, the web app manifest and the browser theme colour are all consumed outside a
+stylesheet — satori rasterises to PNG, and the manifest is JSON read by the operating system. None
+of them can resolve a CSS custom property. `BRAND` and `OG` in `src/lib/site.ts` are the single
+place those values are duplicated, each marked and each documented as mirroring a specific token.
+One duplication in one file is maintainable; the same values scattered across six generated assets
+is how palettes drift.
+
+## ADR-0034 — Email templates are hand-written strings, not React Email
+**Date:** 2026-09-06 · **Status:** Accepted
+
+The plan specifies React Email plus Resend. Email clients are a 1998 rendering target — Outlook uses
+Word's layout engine, Gmail strips `<style>` blocks — so every rule has to be inlined on the element
+regardless of how the markup is authored; a React renderer produces the same inline styles through
+more dependencies. There is also no mail provider configured to send with, so adding a client SDK
+would add a dependency that cannot be exercised.
+
+`src/server/email/send.ts` logs what would have been sent and returns cleanly, and `sendQuietly`
+never throws: a member whose entry was approved must not see an error because the mail queue was
+down. Wiring a provider is one function body. The templates themselves are real and tested,
+including that user-supplied names are escaped — a member's own name reaches the template, and an
+unescaped one is an injection into every inbox that receives it.

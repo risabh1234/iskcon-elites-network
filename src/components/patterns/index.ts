@@ -10,3 +10,4 @@ export { EventCard, type EventCardProps } from './EventCard';
 export { StoryCard, type StoryCardProps } from './StoryCard';
 export { MemberForm, type MemberFormProps, type MemberFormValues } from './MemberForm';
 export { EventTime, type EventTimeProps } from './EventTime';
+export { NotFoundSearch } from './NotFoundSearch';
