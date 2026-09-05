@@ -30,6 +30,16 @@ export async function listEvents(
   return ok(rows.map(toEventDto));
 }
 
+/** Counts for the console, so no component has to read the clock. */
+export async function countEvents(actor: Actor): Promise<Result<{ total: number; upcoming: number }>> {
+  const rows = await repo.listEvents({ includeUnpublished: can(actor, 'event:read:unpublished') });
+  const now = Date.now();
+  return ok({
+    total: rows.length,
+    upcoming: rows.filter((row) => row.startsAt.getTime() >= now).length,
+  });
+}
+
 export async function getEvent(actor: Actor, idOrSlug: string): Promise<Result<EventDto>> {
   const record = (await repo.findEventBySlug(idOrSlug)) ?? (await repo.findEventById(idOrSlug));
   if (!record) return err(notFound('That event could not be found.'));

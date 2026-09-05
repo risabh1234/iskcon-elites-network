@@ -21,3 +21,12 @@ export async function cancelRegistrationAction(eventId: string): Promise<EventAc
   revalidatePath('/events');
   return { ok: true };
 }
+
+export async function cancelEventAction(eventId: string): Promise<EventActionState> {
+  const result = await service.deleteEvent(await getActor(), eventId);
+  if (!result.ok) return { error: result.error.message };
+
+  revalidatePath('/events');
+  revalidatePath('/admin/events');
+  return { ok: true };
+}

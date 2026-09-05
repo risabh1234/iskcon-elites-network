@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "db:seed": "npx tsx prisma/seed.ts",
-    "db:migrate": "prisma migrate deploy"
+    "db:migrate": "prisma migrate deploy",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
@@ -43,6 +44,7 @@
     "@fontsource-variable/newsreader": "^5.3.0",
     "@fontsource-variable/noto-serif-devanagari": "^5.3.0",
     "@opennextjs/cloudflare": "^1.20.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.1",
     "@types/pg": "^8.20.0",

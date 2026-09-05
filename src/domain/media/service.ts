@@ -50,3 +50,36 @@ export async function uploadImage(
     return err(internal('The upload failed.', { cause }));
   }
 }
+
+export type MediaAssetDto = {
+  id: string;
+  key: string;
+  mime: string;
+  bytes: number;
+  width: number | null;
+  height: number | null;
+  hasBlurhash: boolean;
+  uploadedBy: string | null;
+  createdAt: string;
+};
+
+/** Admin-only listing of recorded assets. */
+export async function listAssets(actor: Actor): Promise<Result<MediaAssetDto[]>> {
+  if (!can(actor, 'admin:access')) return err(forbidden());
+
+  const rows = await repo.listAssets();
+
+  return ok(
+    rows.map((row) => ({
+      id: row.id,
+      key: row.key,
+      mime: row.mime,
+      bytes: row.bytes,
+      width: row.width,
+      height: row.height,
+      hasBlurhash: row.blurhash != null,
+      uploadedBy: row.uploadedBy?.name ?? null,
+      createdAt: row.createdAt.toISOString(),
+    })),
+  );
+}

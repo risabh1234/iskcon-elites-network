@@ -31,3 +31,22 @@ export async function putObject(
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(key);
   return data.publicUrl;
 }
+
+/** Assets recorded in the database, for the admin media view. */
+export async function listAssets(limit = 100) {
+  const { default: prisma } = await import('@/lib/prisma');
+  return prisma.mediaAsset.findMany({
+    select: {
+      id: true, key: true, bucket: true, mime: true, bytes: true,
+      width: true, height: true, blurhash: true, createdAt: true,
+      uploadedBy: { select: { name: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+}
+
+export async function countAssets(): Promise<number> {
+  const { default: prisma } = await import('@/lib/prisma');
+  return prisma.mediaAsset.count();
+}

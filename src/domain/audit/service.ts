@@ -39,12 +39,20 @@ export type AuditLogDto = {
 
 export async function listAudit(
   actor: Actor,
-  options: Parameters<typeof repo.list>[0] = {},
+  options: Omit<Parameters<typeof repo.list>[0], 'from'> & { withinDays?: number } = {},
 ): Promise<Result<{ entries: AuditLogDto[]; nextCursor: string | null }>> {
   // Reading who did what is itself privileged.
   if (!can(actor, 'admin:access')) return err(forbidden());
 
-  const { rows, nextCursor } = await repo.list(options);
+  // The cutoff is computed here rather than in the page: a component that reads
+  // the clock is impure and renders differently on every pass.
+  const { withinDays, ...rest } = options;
+  const from =
+    withinDays && Number.isFinite(withinDays) && withinDays > 0
+      ? new Date(Date.now() - withinDays * 86_400_000)
+      : undefined;
+
+  const { rows, nextCursor } = await repo.list({ ...rest, from });
 
   return ok({
     entries: rows.map((row) => ({

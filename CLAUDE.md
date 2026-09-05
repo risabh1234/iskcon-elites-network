@@ -176,6 +176,25 @@ for. See `docs/AUDIT.md` §6.
 - Every route has a designed loading, error and empty state. No page component over 200 lines
   (`src/app/admin` excepted until Phase 6).
 
+## The console
+
+`src/app/(admin)/admin/{members,events,stories,users,media,audit}` with a shared shell — sidebar,
+breadcrumb, ⌘K palette. Rules that hold here:
+
+- **No file over 150 lines. No Prisma.** The console calls services like everything else.
+- The gate is `can(actor, 'admin:access')` in the layout, not the proxy. The proxy only checks that
+  a cookie exists; a forged one gets past it and is refused here (ADR-0029).
+- **Every destructive action confirms by naming the object** — `ConfirmButton` takes an
+  `objectName`. Rejection requires a reason, which goes into the audit trail.
+- Deletion is archival. Nothing in the console destroys a row.
+- Role changes go through the policy layer, which refuses self-demotion, refuses an ADMIN acting on
+  a SUPERADMIN, and refuses to leave the register with no administrator. The UI disables what it
+  can, but **a disabled control is a courtesy, not a control**.
+- Filters and tabs live in the URL so a reviewer can send a colleague the exact view they are on.
+- Components never read the clock — ask a service (ADR-0030).
+
+`npm run e2e` runs the Playwright specs proving the console refuses everyone who is not a reviewer.
+
 ## Data model
 
 One `Member` table with a `kind` enum — `Alumnus` and `Speaker` are gone. Key rules:

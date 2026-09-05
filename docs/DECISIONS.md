@@ -328,3 +328,40 @@ directory instead of rendering an invented list of mentors. This rebuild removed
 members from the home page for exactly this reason; replacing them with fabricated mentors would
 have been the same mistake in a different room. The page ships honest and thin, and the feature
 lands when the state machine does.
+
+## ADR-0028 — The approval queue has no diff, because there is nothing to diff
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`REBUILD_PLAN.md` Phase 6 asks the members queue for a side-by-side diff of submitted versus current
+values. There is no such pair: the schema has no revision or draft model, so a pending entry **is**
+the current row rather than a proposed change to one, and a "before" column would have to be
+invented. The queue therefore shows the submission itself with approve, reject-with-reason and
+archive. A revision model is the prerequisite and was not part of Phase 4's schema; adding one is a
+real piece of work — a `MemberRevision` table, a merge-on-approve path, and a way to show an entry
+that has both a live and a proposed state — and it should be scoped deliberately rather than
+improvised to satisfy a checklist.
+
+## ADR-0029 — The console fails closed, and the proxy is not the control
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`src/proxy.ts` redirects a request with no session cookie, but it does not validate the token or
+read a role: the proxy runs on every request and a database round trip there would tax the whole
+site. The control is `can(actor, 'admin:access')` in the admin layout, re-checked by every service
+beneath it. A Playwright spec proves the distinction directly — a **forged** session cookie gets
+past the proxy and renders no console navigation, no table and no data.
+
+One consequence worth recording: when the database is unreachable, `getActor()` throws and the admin
+route answers 500 rather than rendering the denial page. That fails closed, which is the right
+direction, so it is left as is. The e2e assertion is written as an absence — no console navigation,
+no table — precisely so it holds under both outcomes rather than pinning to whichever page happens
+to render.
+
+## ADR-0030 — Components never read the clock
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`Date.now()` inside a Server Component makes it impure: it renders differently on every pass, which
+defeats caching and produced a `react-hooks/purity` error on the audit page. Time-dependent
+questions — "the last 7 days", "how many are upcoming" — now belong to services (`listAudit`'s
+`withinDays`, `countEvents`), which are already the layer that talks to the outside world. The cost
+is one more service function per question; the benefit is that a page is a pure function of its
+inputs, which is what makes it cacheable and testable.

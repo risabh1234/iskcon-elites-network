@@ -34,10 +34,8 @@ const TOKEN_FILES = new Set(['src/styles/tokens.css']);
  * Do not add to this list. Removing entries is the goal.
  */
 const LEGACY = new Map([
-  ['src/app/admin/page.tsx', 'Phase 6'],
-  ['src/app/admin/layout.tsx', 'Phase 6'],
-  ['src/app/sign-in/[[...sign-in]]/page.tsx', 'Phase 5.5'],
-  ['src/app/sign-up/[[...sign-up]]/page.tsx', 'Phase 5.5'],
+  // Empty. Every file in src/ is now on the token system. If you are about to
+  // add an entry here, you are about to make the codebase worse — fix the file.
 ]);
 
 /**
