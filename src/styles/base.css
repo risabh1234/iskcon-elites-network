@@ -120,6 +120,11 @@
 
   a {
     color: inherit;
+    /* Underlined by default. Colour alone is not a distinguishable link — a
+       reader who cannot separate the two greys has nothing to go on, and this
+       is a WCAG failure axe catches. Chrome and cards opt out with
+       `no-underline`; body copy should not. */
+    text-decoration-line: underline;
     text-decoration-color: var(--color-line-strong);
     text-underline-offset: 0.18em;
     text-decoration-thickness: from-font;

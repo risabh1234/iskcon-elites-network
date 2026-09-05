@@ -281,3 +281,50 @@ throws and never returns a failure: an action that succeeded must not be reporte
 the log write did, so a failure is logged loudly to stderr and the mutation stands. The audit view
 is admin-only and drops the actor's email, because a log viewer is not a place to re-expose contact
 details.
+
+## ADR-0024 — Directory filter state lives in the URL
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`q`, `kind`, `expertise`, `country`, `sort`, `view` and `cursor` are all query parameters, parsed
+and serialised by one module (`src/lib/search-params.ts`) so the server and the client cannot
+disagree about what `?sort=recent` means. That is what makes a filtered view shareable, bookmarkable
+and correct under the back button — none of which component state can do. `nuqs` was not added: the
+parsing is thirty lines, and a dependency that owns URL state is a dependency that owns navigation.
+Unknown values fall back to defaults rather than throwing, because a URL is user input and may have
+been hand-edited or truncated.
+
+Two consequences worth stating. Any filter change clears the cursor, since page three of the old
+result set is meaningless in the new one. And a text query goes through ranked search while
+everything else is a filtered list — the branch is explicit in the page rather than hidden in the
+repository, because only one of the two can be cursor-paginated.
+
+## ADR-0025 — The header and footer were rebuilt, not patched
+**Date:** 2026-09-06 · **Status:** Accepted
+
+Both were designed for a dark site that no longer exists. On the light pages the header measured
+**1.05:1** — invisible rather than merely low-contrast — and axe failed every route because of it.
+The footer carried a newsletter box wired to nothing, a social row whose links all pointed at `#`,
+and a "Knowledge Centre" that was never built; links to pages that do not exist are worse than no
+links, because they teach people the site is careless. Both are now built from the primitives, and
+the header is no longer fixed-position: a sticky bar costs vertical space on every phone screen and
+buys nothing on pages people scroll through once.
+
+## ADR-0026 — Anchors are underlined by default
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`src/styles/base.css` set a text-decoration *colour* but never a decoration *line*, so inline links
+were distinguished from body copy by colour alone at 2.62:1 — a WCAG failure axe caught on the
+sign-in page. Anchors now carry `text-decoration-line: underline` globally, and chrome that should
+not look like prose (nav, cards, buttons) opts out with `no-underline`. Defaulting to underlined and
+opting out is the right way round: forgetting the opt-out makes a link look like a link, whereas
+forgetting to add one makes a link invisible.
+
+## ADR-0027 — Mentorship states where it stands rather than mocking a mentor list
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`MentorshipProfile` and `MentorshipRequest` exist in the schema, but the request state machine and
+seeded mentor data do not, so `/mentorship` explains how requests will work and points at the
+directory instead of rendering an invented list of mentors. This rebuild removed three fabricated
+members from the home page for exactly this reason; replacing them with fabricated mentors would
+have been the same mistake in a different room. The page ships honest and thin, and the feature
+lands when the state machine does.

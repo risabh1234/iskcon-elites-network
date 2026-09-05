@@ -1,52 +1,70 @@
-import { Metadata } from "next";
-import Link from "next/link";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Button } from '@/components/primitives';
+import { PageHeader, Prose, Section } from '@/components/patterns';
 
 export const metadata: Metadata = {
-  title: "About | ISKCON Elites Network",
-  description: "Learn more about the ISKCON Elites Network.",
+  title: 'About',
+  description:
+    'What the ISKCON Elites Network is, who it is for, and how entries to the register are reviewed.',
 };
 
+/** Short and confident. The case for the institution, not a brochure. */
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-[#0A111F] text-white font-sans flex flex-col py-24 md:py-32">
-      <div className="container mx-auto px-6 max-w-4xl flex-1 flex flex-col items-center text-center">
+    <Section>
+      <PageHeader eyebrow="About" title="What this is" />
 
-        {/* Overhead Tag */}
-        <div className="inline-block border border-[#D29E4D]/50 rounded-full px-4 py-1.5 mb-10">
-          <span className="text-[#D29E4D] text-[11px] font-bold tracking-[0.25em] uppercase">
-            Connecting the Global Community
-          </span>
-        </div>
-
-        {/* Main Heading */}
-        <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold font-serif mb-16 leading-tight">
-          A Network of <span className="text-[#D29E4D] italic font-normal">Distinguished</span> Individuals
-        </h1>
-
-        {/* Body Content */}
-        <div className="space-y-6 md:space-y-8 text-lg md:text-[21px] text-slate-300 font-light leading-relaxed md:leading-[1.8] max-w-3xl text-left md:text-center w-full">
+      <div className="mt-[var(--spacing-7)]">
+        <Prose>
           <p>
-            <strong className="text-white font-semibold">ISKCON Elite</strong> is a network of distinguished individuals associated with ISKCON who have excelled in diverse fields such as government service, entrepreneurship, business, administration, politics, science, education, technology, healthcare, environmental sustainability, arts, and social leadership.
+            The ISKCON Elites Network is a register of people who practise a tradition and a
+            profession without asking either to make room for the other — physicians, civil
+            servants, engineers, teachers, founders and scholars who did not treat the two as a
+            compromise.
           </p>
-          <p>
-            Their connection with ISKCON has not only enriched their spiritual lives but has also positively influenced their academic achievements, professional growth, leadership abilities, and personal character. Through the values, discipline, and wisdom gained from devotional practice, they have been able to make meaningful contributions to society while pursuing excellence in their respective careers.
-          </p>
-          <p>
-            These accomplished individuals serve as ambassadors of ISKCON within professional, academic, and public spheres, demonstrating that spiritual principles and worldly success can go hand in hand. Their lives inspire others by showcasing how <span className="text-[#D29E4D] font-medium">Krishna consciousness</span> can support both personal fulfillment and outstanding achievement in the modern world.
-          </p>
-        </div>
 
-        {/* Buttons */}
-        <div className="mt-16 flex flex-col sm:flex-row items-center gap-6 justify-center w-full">
-          <Link href="/sign-up" className="bg-[#D29E4D] text-white font-semibold py-4 px-10 rounded-full hover:bg-[#b88942] transition-colors w-full sm:w-auto tracking-wide text-center block sm:inline-block">
-            Join the Network
-          </Link>
-          <Link href="/directory" className="bg-transparent border border-white/20 text-white font-medium py-4 px-10 rounded-full hover:bg-white/5 transition-colors flex items-center justify-center gap-3 w-full sm:w-auto tracking-wide text-center">
-            View Directory <span className="text-xl leading-none">&rarr;</span>
-          </Link>
-        </div>
+          <h2>Why a register</h2>
+          <p>
+            Networks of this kind usually exist as a mailing list nobody reads and a group chat
+            nobody can search. The value is in being able to find one specific person: someone in
+            your field, in your city, who has already faced whatever you are facing. That is a
+            directory problem, and it is worth solving properly.
+          </p>
 
+          <h2>Who it is for</h2>
+          <p>
+            Members of the network. Entries are submitted by members and reviewed before they
+            appear, and contact details are visible only to people who have signed in — the register
+            exists so the network can reach itself, not so addresses can be collected from a public
+            page.
+          </p>
+
+          <h2>How entries are reviewed</h2>
+          <p>
+            Every submission enters a queue. A reviewer checks that the person is who the entry says
+            they are, and either publishes it or returns it with a reason. Nothing is deleted:
+            withdrawn entries are archived, because the register&rsquo;s history is part of the
+            register.
+          </p>
+
+          <h2>What it is not</h2>
+          <p>
+            It is not a social network, a fundraising list, or a place to advertise. There is no
+            feed. The register does one thing, and the measure of whether it works is whether people
+            find each other in it.
+          </p>
+        </Prose>
+
+        <div className="mt-[var(--spacing-8)] flex flex-wrap gap-[var(--spacing-3)]">
+          <Button asChild variant="primary">
+            <Link href="/directory">Open the directory</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/mentorship">Find a mentor</Link>
+          </Button>
+        </div>
       </div>
-    </div>
+    </Section>
   );
 }

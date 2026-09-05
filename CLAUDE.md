@@ -164,6 +164,18 @@ or invented members, carousels for primary content, centred paragraphs over 66ch
 These were all removed in the Phase 0 security hotfix; the note stays as a record of what to look
 for. See `docs/AUDIT.md` §6.
 
+## Surfaces
+
+- `/directory` — server-rendered, filters in the URL (`src/lib/search-params.ts`), cursor
+  pagination, gallery and index views. A text query uses ranked search; everything else is a
+  filtered list.
+- `/directory/[slug]` — slugs are canonical. A UUID in the segment 308-redirects to the slug.
+- `/events` — upcoming/past tabs, real `.ics` download, optimistic registration with capacity.
+- `/` — four movements only: Statement, Proof, What the network does, Entry. **Never seed it with
+  invented members**; if the register cannot be read, the Proof section simply does not render.
+- Every route has a designed loading, error and empty state. No page component over 200 lines
+  (`src/app/admin` excepted until Phase 6).
+
 ## Data model
 
 One `Member` table with a `kind` enum — `Alumnus` and `Speaker` are gone. Key rules:

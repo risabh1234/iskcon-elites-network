@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Trash2, Edit2 } from 'lucide-react';
-import EditEntryModal from '../directory/EditEntryModal';
-import { DirectoryMember } from '../directory/DirectoryClient';
+import { Dialog, DialogContent } from '@/components/primitives';
+import { MemberForm } from '@/components/patterns';
+import { updateMemberAction } from '@/actions/member';
+import type { MemberDto } from '@/domain/member/dto';
 import { AnimatePresence } from 'framer-motion';
 
 export default function AdminDashboard() {
@@ -18,9 +20,9 @@ export default function AdminDashboard() {
   const [statusMsg, setStatusMsg] = useState({ text: '', type: '' });
 
   // Right Column data state
-  type RecordType = { id: string; name: string; avatarUrl: string | null; cohort?: string; title?: string; bio?: string; email?: string | null; story?: string | null; recommendation?: string | null; category?: string; isApproved?: boolean };
+  type RecordType = MemberDto;
   const [records, setRecords] = useState<{ alumni: RecordType[], speakers: RecordType[] }>({ alumni: [], speakers: [] });
-  const [editingMember, setEditingMember] = useState<DirectoryMember | null>(null);
+  const [editingMember, setEditingMember] = useState<MemberDto | null>(null);
 
   // Admin / User Management State
   type UserType = { id: string; email: string; username?: string; name?: string | null; role: 'USER' | 'ADMIN' | 'SUPERADMIN'; canCreateEvents: boolean; createdAt: string };
@@ -37,24 +39,10 @@ export default function AdminDashboard() {
   type EventType = { id: string; title: string; location: string; date: string; time: string };
   const [events, setEvents] = useState<EventType[]>([]);
 
-  const handleEdit = (record: RecordType, type: 'Alumni' | 'Speaker') => {
-    const member: DirectoryMember = {
-      id: record.id,
-      name: record.name,
-      avatarUrl: record.avatarUrl,
-      roleType: type,
-      primaryLabel: type === 'Alumni' ? record.cohort || '' : (record.title === 'Featured Guest' ? 'Guest' : 'Speaker'),
-      secondaryLabel: type === 'Alumni' ? record.category || '' : record.title || '',
-      bio: record.bio,
-      email: record.email,
-      story: record.story,
-      recommendation: record.recommendation,
-      category: record.category,
-      cohort: record.cohort,
-      title: record.title,
-      isApproved: record.isApproved,
-    };
-    setEditingMember(member);
+  // The API returns full member DTOs, so the row is the record — no need to
+  // reassemble one from display fields.
+  const handleEdit = (record: RecordType) => {
+    setEditingMember(record);
   };
 
   const handleApprove = async (id: string, category: 'alumni' | 'speaker') => {
@@ -444,7 +432,7 @@ export default function AdminDashboard() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleEdit(alumnus, 'Alumni')}
+                      onClick={() => handleEdit(alumnus)}
                       className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-colors"
                       title="Edit Record"
                     >
@@ -486,7 +474,7 @@ export default function AdminDashboard() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleEdit(speaker, 'Speaker')}
+                      onClick={() => handleEdit(speaker)}
                       className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-colors"
                       title="Edit Record"
                     >
@@ -637,19 +625,36 @@ export default function AdminDashboard() {
         )}
       </main>
 
-      {/* Edit Modal */}
-      <AnimatePresence>
-        {editingMember && (
-          <EditEntryModal
-            member={editingMember}
-            onClose={() => setEditingMember(null)}
-            onSuccess={() => {
-              setEditingMember(null);
-              // useEffect will trigger re-fetch because editingMember changes
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {/* Edit — one shared MemberForm, no bespoke modal. Phase 6 rebuilds
+          this console; the form it uses is already the final one. */}
+      <Dialog open={Boolean(editingMember)} onOpenChange={(open) => !open && setEditingMember(null)}>
+        {editingMember ? (
+          <DialogContent
+            title="Edit directory entry"
+            description={editingMember.name}
+            className="max-w-[48rem]"
+          >
+            <MemberForm
+              mode="edit"
+              action={updateMemberAction}
+              defaultValues={{
+                id: editingMember.id,
+                kind: editingMember.kind,
+                legalName: editingMember.name,
+                initiatedName: editingMember.initiatedName,
+                headline: editingMember.headline,
+                bio: editingMember.bio,
+                city: editingMember.city,
+                countryCode: editingMember.countryCode,
+                cohort: editingMember.cohort,
+                email: editingMember.email,
+                recommendation: editingMember.recommendation,
+              }}
+              onSuccess={() => setEditingMember(null)}
+            />
+          </DialogContent>
+        ) : null}
+      </Dialog>
 
       {/* Delete User Modal */}
       <AnimatePresence>

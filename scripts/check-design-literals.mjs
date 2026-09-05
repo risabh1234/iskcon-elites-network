@@ -34,47 +34,46 @@ const TOKEN_FILES = new Set(['src/styles/tokens.css']);
  * Do not add to this list. Removing entries is the goal.
  */
 const LEGACY = new Map([
-  ['src/styles/legacy.css', 'Phase 5.4 — deleted with the home page marquee'],
-  ['src/app/page.tsx', 'Phase 5.4'],
-  ['src/app/about/page.tsx', 'Phase 5.5'],
-  ['src/app/mentorship/page.tsx', 'Phase 5.5'],
-  ['src/app/success-stories/page.tsx', 'Phase 5.5'],
-  ['src/app/events/page.tsx', 'Phase 5.3'],
-  ['src/app/events/AddEventModal.tsx', 'Phase 5.3'],
-  ['src/app/events/EditEventModal.tsx', 'Phase 5.3'],
-  ['src/app/directory/page.tsx', 'Phase 5.1'],
-  ['src/app/directory/DirectoryClient.tsx', 'Phase 5.1'],
-  ['src/app/directory/AddEntryModal.tsx', 'Phase 5.1'],
-  ['src/app/directory/EditEntryModal.tsx', 'Phase 5.1'],
-  ['src/app/directory/[id]/page.tsx', 'Phase 5.2'],
   ['src/app/admin/page.tsx', 'Phase 6'],
   ['src/app/admin/layout.tsx', 'Phase 6'],
   ['src/app/sign-in/[[...sign-in]]/page.tsx', 'Phase 5.5'],
   ['src/app/sign-up/[[...sign-up]]/page.tsx', 'Phase 5.5'],
-  ['src/components/layout/Header.tsx', 'Phase 2'],
-  ['src/components/layout/Footer.tsx', 'Phase 2'],
 ]);
 
+/**
+ * Value rules are checked against code only. A colour or a duration written in
+ * a comment cannot reach the rendered output, and flagging prose about the
+ * rules is noise that trains people to ignore the check.
+ *
+ * Class-name rules are checked against the WHOLE line, comments included:
+ * Tailwind v4 scans comments for class candidates, and a class name quoted in
+ * one really does compile into CSS. That is not hypothetical — it happened, and
+ * broke every page until it was found.
+ */
 const RULES = [
   {
     id: 'hex-colour',
+    codeOnly: true,
     // #abc / #aabbcc / #aabbccdd
     re: /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g,
     hint: 'use a colour token',
   },
   {
     id: 'raw-px',
+    codeOnly: true,
     // 12px, 1.5px — but not inside a var() fallback or a token definition
     re: /(?<![\w-])\d+(?:\.\d+)?px\b/g,
     hint: 'use a spacing, radius or text token',
   },
   {
     id: 'raw-duration',
+    codeOnly: true,
     re: /(?<![\w-])\d+(?:\.\d+)?ms\b/g,
     hint: 'use a duration token',
   },
   {
     id: 'rgb-colour',
+    codeOnly: true,
     re: /\b(?:rgba?|hsla?)\s*\(/g,
     hint: 'use a colour token',
   },
@@ -126,16 +125,22 @@ for (const file of walk(SCAN_DIR)) {
   lines.forEach((line, i) => {
     if (line.includes('design-literal-allow')) return;
 
+    // Strip single-line comments and any trailing `//` remainder. Block
+    // comments spanning several lines are not tracked — a value hidden in one
+    // is a rare enough case to accept the miss rather than write a parser.
+    const code = line.replace(/\/\*.*?\*\//g, '').split('//')[0] ?? '';
+
     for (const rule of RULES) {
+      const subject = rule.codeOnly ? code : line;
       rule.re.lastIndex = 0;
-      const match = rule.re.exec(line);
+      const match = rule.re.exec(subject);
       if (match) {
         violations.push({
           file: rel,
           line: i + 1,
           rule: rule.id,
           hint: rule.hint,
-          text: line.trim().slice(0, 100),
+          text: (rule.codeOnly ? code : line).trim().slice(0, 100),
         });
       }
     }

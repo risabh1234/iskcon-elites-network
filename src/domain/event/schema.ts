@@ -54,14 +54,14 @@ const eventFields = z
     description: z.string().trim().max(10_000).optional().or(z.literal('')),
     startsAt: z.coerce.date(),
     endsAt: z.coerce.date().optional().nullable(),
-    timezone: ianaTimezone.default('UTC'),
-    mode: z.enum(EVENT_MODES).default('IN_PERSON'),
+    timezone: ianaTimezone,
+    mode: z.enum(EVENT_MODES),
     venue: z.string().trim().max(200).optional().or(z.literal('')),
     city: z.string().trim().max(120).optional().or(z.literal('')),
     countryCode: z.string().trim().length(2).transform((v) => v.toUpperCase()).optional().or(z.literal('')),
     onlineUrl: z.string().trim().url().max(2_000).optional().or(z.literal('')),
     capacity: z.coerce.number().int().positive().max(100_000).optional().nullable(),
-    isHighlighted: z.boolean().optional().default(false),
+    isHighlighted: z.boolean(),
   });
 
 type EventFields = Partial<z.infer<typeof eventFields>>;
@@ -72,7 +72,27 @@ const endsAfterStart = (v: EventFields) =>
 const onlineHasLink = (v: EventFields) =>
   v.mode === undefined || v.mode === 'IN_PERSON' || Boolean(v.onlineUrl);
 
+/**
+ * Defaults live on the CREATE schema only.
+ *
+ * `.partial()` does not strip a Zod default — an omitted field still arrives
+ * filled in — so a partial schema built from a shape carrying defaults would
+ * silently reset those columns. Renaming an event would have set its timezone
+ * back to UTC, its mode to in-person, and cleared its highlight.
+ */
 export const createEventSchema = eventFields
+  .extend({
+    timezone: ianaTimezone.default('UTC'),
+    mode: z.enum(EVENT_MODES).default('IN_PERSON'),
+    isHighlighted: z.boolean().default(false),
+    description: eventFields.shape.description.optional(),
+    venue: eventFields.shape.venue.optional(),
+    city: eventFields.shape.city.optional(),
+    countryCode: eventFields.shape.countryCode.optional(),
+    onlineUrl: eventFields.shape.onlineUrl.optional(),
+    endsAt: eventFields.shape.endsAt.optional(),
+    capacity: eventFields.shape.capacity.optional(),
+  })
   .refine(endsAfterStart, {
     message: 'The end time cannot be before the start.',
     path: ['endsAt'],

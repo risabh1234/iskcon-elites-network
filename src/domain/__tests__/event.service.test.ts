@@ -177,3 +177,68 @@ describe('registration', () => {
     expect((await service.registerForEvent(member, 'e1')).ok).toBe(false);
   });
 });
+
+describe('getEvent', () => {
+  it('resolves by slug first, then by id', async () => {
+    vi.mocked(repo.findEventBySlug).mockResolvedValue(rec() as never);
+    expect((await service.getEvent(anon, 'annual-gathering')).ok).toBe(true);
+    expect(repo.findEventById).not.toHaveBeenCalled();
+  });
+
+  it('hides an unpublished event behind NotFound', async () => {
+    vi.mocked(repo.findEventBySlug).mockResolvedValue(null);
+    vi.mocked(repo.findEventById).mockResolvedValue(rec({ status: 'DRAFT' }) as never);
+    const result = await service.getEvent(anon, 'e1');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('NotFound');
+  });
+});
+
+describe('updating an event', () => {
+  beforeEach(() => {
+    vi.mocked(repo.findEventById).mockResolvedValue(rec() as never);
+    vi.mocked(repo.updateEvent).mockResolvedValue(rec() as never);
+  });
+
+  it('applies only the fields that were sent', async () => {
+    await service.updateEvent(admin, 'e1', { title: 'Renamed' });
+    expect(vi.mocked(repo.updateEvent).mock.calls[0]![1]).toEqual({ title: 'Renamed' });
+  });
+
+  it('clears other highlights when one is promoted', async () => {
+    await service.updateEvent(admin, 'e1', { isHighlighted: true });
+    expect(repo.clearHighlightsExcept).toHaveBeenCalledWith('e1');
+  });
+
+  it('records the timezone change in the audit trail', async () => {
+    await service.updateEvent(admin, 'e1', { timezone: 'Europe/London' });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'event.update', entity: 'Event' }),
+    );
+  });
+
+  it('rejects an invalid timezone on update too', async () => {
+    const result = await service.updateEvent(admin, 'e1', { timezone: 'EST' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('Validation');
+  });
+
+  it('answers NotFound for an event that does not exist', async () => {
+    vi.mocked(repo.findEventById).mockResolvedValue(null);
+    const result = await service.updateEvent(admin, 'gone', { title: 'x' });
+    if (!result.ok) expect(result.error.kind).toBe('NotFound');
+  });
+});
+
+describe('cancelling a registration', () => {
+  it('requires a signed-in member', async () => {
+    const result = await service.cancelRegistration(anon, 'e1');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('Unauthenticated');
+  });
+
+  it('cancels for the caller only, never for someone else', async () => {
+    expect((await service.cancelRegistration(member, 'e1')).ok).toBe(true);
+    expect(repo.cancelRegistration).toHaveBeenCalledWith('e1', 'u1');
+  });
+});

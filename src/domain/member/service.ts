@@ -59,10 +59,15 @@ export async function listMembers(
   return ok({ members: rows.map((row) => toMemberDto(row, actor)), nextCursor });
 }
 
-export async function searchMembers(
-  actor: Actor,
-  input: unknown,
-): Promise<Result<MemberSearchDto[]>> {
+/**
+ * Ranked search, hydrated into the same shape the list returns.
+ *
+ * Two queries rather than one: the ranking query stays a narrow index scan, and
+ * the hydration is a primary-key lookup over at most a page of ids. Selecting
+ * every column inside the ranked query would make the GIN scan carry the whole
+ * row through the sort for no benefit.
+ */
+export async function searchMembers(actor: Actor, input: unknown): Promise<Result<MemberPage>> {
   const parsed = searchSchema.safeParse(input);
   if (!parsed.success) {
     return err(validation('That search could not be run.', { fields: fieldErrors(parsed.error) }));
@@ -71,10 +76,33 @@ export async function searchMembers(
   const includeUnpublished =
     parsed.data.includeUnpublished === true && can(actor, 'member:read:unpublished');
 
-  const rows = await repo.searchMembers({
+  const ranked = await repo.searchMembers({
     query: parsed.data.q,
     includeUnpublished,
     limit: parsed.data.limit,
+  });
+
+  const rows = await repo.findManyByIds(ranked.map((r) => r.id));
+
+  // Ranked search is not cursor-paginated: relevance ordering is not stable
+  // enough to resume from, so the result set is capped instead.
+  return ok({ members: rows.map((row) => toMemberDto(row, actor)), nextCursor: null });
+}
+
+/** The light-weight ranked rows, for a type-ahead that needs no full record. */
+export async function suggestMembers(
+  actor: Actor,
+  input: unknown,
+): Promise<Result<MemberSearchDto[]>> {
+  const parsed = searchSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(validation('That search could not be run.', { fields: fieldErrors(parsed.error) }));
+  }
+
+  const rows = await repo.searchMembers({
+    query: parsed.data.q,
+    includeUnpublished: can(actor, 'member:read:unpublished'),
+    limit: parsed.data.limit ?? 8,
   });
 
   return ok(rows.map(toSearchDto));
@@ -279,6 +307,50 @@ export async function deleteMember(actor: Actor, id: string): Promise<Result<voi
   } catch (cause) {
     return err(internal('The entry could not be removed.', { cause }));
   }
+}
+
+/** Members adjacent to this one, for the profile page. */
+export async function relatedMembers(
+  actor: Actor,
+  member: MemberDto,
+  limit = 6,
+): Promise<MemberDto[]> {
+  const rows = await repo.findRelated(
+    { id: member.id, city: member.city, expertiseSlugs: member.expertise.map((e) => e.slug) },
+    limit,
+  );
+  return rows.map((row) => toMemberDto(row, actor));
+}
+
+export type Facets = {
+  expertise: { slug: string; label: string; category: string | null; count: number }[];
+  countries: { code: string; name: string; count: number }[];
+};
+
+/** The filter vocabulary, built from what the register actually contains. */
+export async function listFacets(): Promise<Result<Facets>> {
+  const [expertise, countries] = await Promise.all([repo.listExpertise(), repo.listCountries()]);
+
+  const display = new Intl.DisplayNames(undefined, { type: 'region' });
+  const named = countries.map((c) => {
+    let name = c.countryCode;
+    try {
+      name = display.of(c.countryCode) ?? c.countryCode;
+    } catch {
+      // Leave the raw code; an unknown region is still a usable filter.
+    }
+    return { code: c.countryCode, name, count: c.count };
+  });
+
+  return ok({
+    expertise: expertise.map((r) => ({
+      slug: r.slug,
+      label: r.label,
+      category: r.category,
+      count: r._count.members,
+    })),
+    countries: named.sort((a, b) => a.name.localeCompare(b.name)),
+  });
 }
 
 export async function listExpertise(): Promise<Result<{ slug: string; label: string; category: string | null; count: number }[]>> {

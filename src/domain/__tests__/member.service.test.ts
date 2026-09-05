@@ -3,7 +3,8 @@ import type { Actor } from '@/server/policy';
 
 vi.mock('@/domain/member/repository', () => ({
   listMembers: vi.fn(), countMembers: vi.fn(), findMemberById: vi.fn(),
-  findMemberBySlug: vi.fn(), searchMembers: vi.fn(), createMember: vi.fn(),
+  findMemberBySlug: vi.fn(), searchMembers: vi.fn(), findManyByIds: vi.fn(),
+  createMember: vi.fn(), findRelated: vi.fn(), listCountries: vi.fn(),
   updateMember: vi.fn(), archiveMember: vi.fn(), restoreMember: vi.fn(),
   slugExists: vi.fn(), listExpertise: vi.fn(),
 }));
@@ -35,6 +36,7 @@ const record = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(repo.slugExists).mockResolvedValue(false);
+  vi.mocked(repo.findManyByIds).mockResolvedValue([]);
 });
 
 describe('listMembers', () => {
@@ -205,5 +207,83 @@ describe('searchMembers', () => {
     const result = await service.searchMembers(anon, { q: '   ' });
     expect(result.ok).toBe(false);
     expect(repo.searchMembers).not.toHaveBeenCalled();
+  });
+
+  it('hydrates ranked hits into the same shape the list returns', async () => {
+    // One shape everywhere: the gallery renders search results and browse
+    // results with the same card, so search must not return a thinner row.
+    vi.mocked(repo.searchMembers).mockResolvedValue([
+      { id: 'm2', slug: 's', kind: 'ALUMNUS', legalName: 'B', initiatedName: null,
+        headline: null, city: null, countryCode: null, status: 'APPROVED', rank: 0.9 },
+    ] as never);
+    vi.mocked(repo.findManyByIds).mockResolvedValue([record({ id: 'm2' }) as never]);
+
+    const result = await service.searchMembers(anon, { q: 'mumbai' });
+    expect(repo.findManyByIds).toHaveBeenCalledWith(['m2']);
+    if (result.ok) {
+      expect(result.value.members[0]!.expertise).toHaveLength(1);
+      // Relevance order is not stable enough to resume from.
+      expect(result.value.nextCursor).toBeNull();
+    }
+  });
+});
+
+describe('facets are built from what the register actually holds', () => {
+  it('resolves country codes to names and sorts them alphabetically', async () => {
+    vi.mocked(repo.listExpertise).mockResolvedValue([
+      { slug: 'law', label: 'Law', category: 'Public life', _count: { members: 4 } },
+    ] as never);
+    vi.mocked(repo.listCountries).mockResolvedValue([
+      { countryCode: 'IN', count: 120 },
+      { countryCode: 'DE', count: 3 },
+    ] as never);
+
+    const result = await service.listFacets();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.countries.map((c) => c.name)).toEqual(['Germany', 'India']);
+      expect(result.value.expertise[0]).toMatchObject({ slug: 'law', count: 4 });
+    }
+  });
+
+  it('falls back to the raw code for a region Intl does not know', async () => {
+    vi.mocked(repo.listExpertise).mockResolvedValue([]);
+    vi.mocked(repo.listCountries).mockResolvedValue([{ countryCode: 'ZZ', count: 1 }] as never);
+    const result = await service.listFacets();
+    if (result.ok) expect(result.value.countries[0]!.code).toBe('ZZ');
+  });
+});
+
+describe('relatedMembers', () => {
+  it('asks for people in the same city and the same fields', async () => {
+    vi.mocked(repo.findRelated).mockResolvedValue([record({ id: 'm2' }) as never]);
+    const dto = (await service.getMember(anon, 'm1')).ok
+      ? (await service.getMember(anon, 'm1') as { ok: true; value: never }).value
+      : null;
+
+    vi.mocked(repo.findMemberBySlug).mockResolvedValue(record() as never);
+    const base = await service.getMember(anon, 'srivasa-thakura');
+    if (!base.ok) throw new Error('fixture');
+
+    const related = await service.relatedMembers(anon, base.value, 3);
+    expect(repo.findRelated).toHaveBeenCalledWith(
+      { id: 'm1', city: 'Mumbai', expertiseSlugs: ['medicine'] },
+      3,
+    );
+    expect(related).toHaveLength(1);
+    expect(dto).toBeDefined();
+  });
+});
+
+describe('suggestMembers', () => {
+  it('returns the light ranked rows without hydrating them', async () => {
+    vi.mocked(repo.searchMembers).mockResolvedValue([
+      { id: 'm1', slug: 's', kind: 'ALUMNUS', legalName: 'A', initiatedName: null,
+        headline: null, city: 'Mumbai', countryCode: 'IN', status: 'APPROVED', rank: 1 },
+    ] as never);
+
+    const result = await service.suggestMembers(anon, { q: 'a' });
+    expect(repo.findManyByIds).not.toHaveBeenCalled();
+    if (result.ok) expect(result.value[0]!.location).toBe('Mumbai, India');
   });
 });

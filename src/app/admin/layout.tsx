@@ -71,7 +71,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="flex-1 flex flex-col pt-20">
+    <div className="flex-1 flex flex-col">
       {/* Admin Sub-navigation could go here */}
       <div className="bg-slate-900 border-b border-white/5 py-4">
         <div className="container mx-auto px-6">

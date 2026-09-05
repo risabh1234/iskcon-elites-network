@@ -145,6 +145,23 @@ export async function searchMembers(options: {
   `;
 }
 
+/**
+ * Hydrates ranked search hits into full records, preserving the ranking.
+ *
+ * Postgres has no ordering guarantee for `IN (...)`, so the order is restored
+ * from the id list rather than assumed.
+ */
+export async function findManyByIds(ids: string[]): Promise<MemberRecord[]> {
+  if (ids.length === 0) return [];
+
+  const rows = await prisma.member.findMany({ where: { id: { in: ids } }, select: SELECT });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  return ids
+    .map((id) => byId.get(id))
+    .filter((row): row is NonNullable<typeof row> => row != null) as unknown as MemberRecord[];
+}
+
 export async function createMember(data: {
   slug: string;
   kind: 'ALUMNUS' | 'SPEAKER' | 'GUEST';
@@ -190,6 +207,64 @@ export async function restoreMember(id: string): Promise<void> {
 /** True when the slug is free. Slugs are never reused, including by archived rows. */
 export async function slugExists(slug: string): Promise<boolean> {
   return (await prisma.member.count({ where: { slug } })) > 0;
+}
+
+/**
+ * Countries present in the register, with counts, for the filter list.
+ * Only what is actually there — a filter offering empty options is a filter
+ * that teaches people not to trust it.
+ */
+export async function listCountries(): Promise<{ countryCode: string; count: number }[]> {
+  const rows = await prisma.member.groupBy({
+    by: ['countryCode'],
+    where: { ...LIVE, status: 'APPROVED', countryCode: { not: null } },
+    _count: { _all: true },
+    orderBy: { _count: { countryCode: 'desc' } },
+  });
+
+  return rows
+    .filter((r): r is typeof r & { countryCode: string } => r.countryCode !== null)
+    .map((r) => ({ countryCode: r.countryCode, count: r._count._all }));
+}
+
+/**
+ * Members adjacent to this one — same city first, then shared expertise.
+ *
+ * This is the query that makes a directory feel alive rather than like a list
+ * you fell into. Deliberately two cheap indexed lookups instead of one clever
+ * ranked query.
+ */
+export async function findRelated(
+  member: { id: string; city: string | null; expertiseSlugs: string[] },
+  limit = 6,
+): Promise<MemberRecord[]> {
+  const base = { ...LIVE, status: 'APPROVED' as const, id: { not: member.id } };
+
+  const sameCity = member.city
+    ? await prisma.member.findMany({
+        where: { ...base, city: member.city },
+        select: SELECT,
+        take: limit,
+        orderBy: { legalName: 'asc' },
+      })
+    : [];
+
+  const remaining = limit - sameCity.length;
+  const sameField =
+    remaining > 0 && member.expertiseSlugs.length > 0
+      ? await prisma.member.findMany({
+          where: {
+            ...base,
+            id: { notIn: [member.id, ...sameCity.map((m) => m.id)] },
+            expertise: { some: { expertise: { slug: { in: member.expertiseSlugs } } } },
+          },
+          select: SELECT,
+          take: remaining,
+          orderBy: { legalName: 'asc' },
+        })
+      : [];
+
+  return [...sameCity, ...sameField] as unknown as MemberRecord[];
 }
 
 export async function listExpertise() {
