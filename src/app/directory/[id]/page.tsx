@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@clerk/nextjs/server";
 import { ArrowLeft, GraduationCap, Calendar } from "lucide-react";
 
 type Props = {
@@ -20,7 +21,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     // Database connection issue
   }
 
-  if (!member) {
+  // Metadata is public by definition, so an unreviewed profile never contributes one.
+  if (!member || !member.isApproved) {
     return {
       title: "Profile Not Found | ISKCON Elites",
     };
@@ -40,10 +42,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function AlumnusProfilePage({ params }: Props) {
   const { id } = await params;
   
-  let member: { id: string; name: string; avatarUrl: string | null; bio: string; category?: string; cohort?: string; title?: string } | null = null;
+  let member: { id: string; name: string; avatarUrl: string | null; bio: string; isApproved: boolean; category?: string; cohort?: string; title?: string } | null = null;
   let roleType = 'Alumni';
+  let isAdmin = false;
 
   try {
+    const { userId } = await auth();
+    if (userId) {
+      const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
+      isAdmin = !!dbUser && (dbUser.role === 'ADMIN' || dbUser.role === 'SUPERADMIN');
+    }
+
     member = await prisma.alumnus.findUnique({ where: { id } });
     if (!member) {
       member = await prisma.speaker.findUnique({ where: { id } });
@@ -53,7 +62,8 @@ export default async function AlumnusProfilePage({ params }: Props) {
     // DB not connected
   }
 
-  if (!member) {
+  // A profile awaiting review is not public. Admins can still open it to review it.
+  if (!member || (!member.isApproved && !isAdmin)) {
     notFound();
   }
 

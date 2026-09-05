@@ -78,9 +78,20 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const alumni = await prisma.alumnus.findMany({ orderBy: { createdAt: 'desc' } });
-    const speakers = await prisma.speaker.findMany({ orderBy: { createdAt: 'desc' } });
-    
+    // Only admins may see unapproved entries. Everyone else — including anonymous
+    // callers — gets the published directory only.
+    let isAdmin = false;
+    const { userId } = await auth();
+    if (userId) {
+      const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
+      isAdmin = !!dbUser && (dbUser.role === 'ADMIN' || dbUser.role === 'SUPERADMIN');
+    }
+
+    const whereClause = isAdmin ? {} : { isApproved: true };
+
+    const alumni = await prisma.alumnus.findMany({ where: whereClause, orderBy: { createdAt: 'desc' } });
+    const speakers = await prisma.speaker.findMany({ where: whereClause, orderBy: { createdAt: 'desc' } });
+
     return NextResponse.json({ alumni, speakers });
   } catch {
     return NextResponse.json({ error: 'Failed to fetch directory' }, { status: 500 });
@@ -92,6 +103,11 @@ export async function DELETE(request: Request) {
     const { userId } = await auth();
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 });
+    }
+
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
+    if (!dbUser || (dbUser.role !== 'ADMIN' && dbUser.role !== 'SUPERADMIN')) {
+      return new NextResponse('Forbidden: Admins only', { status: 403 });
     }
 
     const url = new URL(request.url);

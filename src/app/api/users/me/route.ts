@@ -22,9 +22,6 @@ export async function GET() {
       // Auto-backfill user if webhook failed
       const clerkUser = await currentUser();
       if (clerkUser) {
-        const userCount = await prisma.user.count();
-        const isFirstUser = userCount === 0;
-
         const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress || '';
         const clerkUsername = clerkUser.username || 
                              (clerkUser.firstName ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim() : 
@@ -35,8 +32,9 @@ export async function GET() {
             clerkId: userId,
             email: clerkEmail,
             username: clerkUsername,
-            role: isFirstUser ? 'SUPERADMIN' : 'USER',
-            canCreateEvents: isFirstUser,
+            // Never self-elevate. Admins are granted deliberately, via the admin console.
+            role: 'USER',
+            canCreateEvents: false,
           }
         });
       }

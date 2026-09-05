@@ -15,9 +15,6 @@ export async function GET() {
       // Auto-backfill user if webhook failed
       const clerkUser = await currentUser();
       if (clerkUser) {
-        const userCount = await prisma.user.count();
-        const isFirstUser = userCount === 0;
-
         const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress || '';
         const clerkUsername = clerkUser.username || 
                              (clerkUser.firstName ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim() : 
@@ -28,8 +25,9 @@ export async function GET() {
             clerkId: userId,
             email: clerkEmail,
             username: clerkUsername,
-            role: isFirstUser ? 'SUPERADMIN' : 'USER',
-            canCreateEvents: isFirstUser,
+            // Never self-elevate. Admins are granted deliberately, via the admin console.
+            role: 'USER',
+            canCreateEvents: false,
           }
         });
       }
@@ -43,9 +41,6 @@ export async function GET() {
     try {
       const client = await clerkClient();
       const clerkUsers = await client.users.getUserList();
-      
-      const userCount = await prisma.user.count();
-      const isFirstUser = userCount === 0;
 
       for (const u of clerkUsers.data) {
         const email = u.emailAddresses[0]?.emailAddress || '';
@@ -63,8 +58,9 @@ export async function GET() {
             clerkId: u.id,
             email: email,
             username: username,
-            role: isFirstUser ? 'SUPERADMIN' : 'USER',
-            canCreateEvents: isFirstUser,
+            // Never self-elevate. Admins are granted deliberately, via the admin console.
+            role: 'USER',
+            canCreateEvents: false,
           }
         });
       }
