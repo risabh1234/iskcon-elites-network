@@ -60,18 +60,17 @@ export default function AdminDashboard() {
 
   const handleApprove = async (id: string, category: 'alumni' | 'speaker') => {
     try {
-      const res = await fetch(`/api/directory/${id}/approve?category=${category}`, {
+      const res = await fetch(`/api/directory/${id}/approve`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isApproved: true })
+        body: JSON.stringify({
+          roleType: category === 'alumni' ? 'Alumni' : 'Speaker',
+          isApproved: true,
+        })
       });
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: await res.text() || 'An error occurred' };
-      }
-      if (res.ok && data.success) {
+      // 204 No Content carries no body, so only parse when there is one.
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+      if (res.ok) {
         setRecords(prev => ({
           ...prev,
           [category === 'alumni' ? 'alumni' : 'speakers']: prev[category === 'alumni' ? 'alumni' : 'speakers'].map((item: RecordType) => 
@@ -87,7 +86,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    fetch('/api/directory')
+    fetch('/api/directory?includeUnpublished=true')
       .then(async (res) => {
         try {
           return await res.json();
@@ -96,7 +95,14 @@ export default function AdminDashboard() {
         }
       })
       .then(data => {
-        if (!data.error) setRecords(data);
+        // The API returns one flat list now; the console still shows the two
+        // tables separately, so it is split here until Phase 6 rebuilds it.
+        if (Array.isArray(data)) {
+          setRecords({
+            alumni: data.filter((m: RecordType & { roleType: string }) => m.roleType === 'Alumni'),
+            speakers: data.filter((m: RecordType & { roleType: string }) => m.roleType === 'Speaker'),
+          });
+        }
       })
       .catch(err => console.error("Failed to fetch records:", err));
   }, [isPublishing, editingMember]); // Refresh after publishing or editing
@@ -113,7 +119,7 @@ export default function AdminDashboard() {
           }
         })
         .then(data => {
-          setUsers(data.users || []);
+          setUsers(Array.isArray(data) ? data : []);
           setIsLoadingUsers(false);
         })
         .catch(err => {
@@ -123,7 +129,7 @@ export default function AdminDashboard() {
     } else if (activeTab === 'events') {
       fetch('/api/events')
         .then(res => res.json())
-        .then(data => setEvents(data.events || []))
+        .then(data => setEvents(Array.isArray(data) ? data : []))
         .catch(err => console.error("Failed to fetch events:", err));
     }
   }, [activeTab]);
@@ -137,7 +143,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({ role: newRole })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok) {
         setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
       } else {
         alert(data.error || 'Failed to update role');
@@ -164,7 +170,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch(`/api/users/${userToDelete.id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok) {
         setUsers(prev => prev.filter(u => u.id !== userToDelete.id));
         setUserToDelete(null);
       } else {
@@ -185,7 +191,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({ canCreateEvents })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok) {
         setUsers(prev => prev.map(u => u.id === id ? { ...u, canCreateEvents } : u));
       } else {
         alert(data.error || 'Failed to update permissions');
@@ -200,7 +206,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch(`/api/events/${id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok) {
         setEvents(events.filter(e => e.id !== id));
       } else {
         alert(data.error || 'Failed to delete event');
@@ -220,12 +226,8 @@ export default function AdminDashboard() {
 
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: await res.text() || 'An error occurred' };
-      }
+      // 204 No Content carries no body, so only parse when there is one.
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
       if (data.url) setImageUrl(data.url);
     } catch (err) {
       console.error("Upload interface error:", err);
@@ -253,14 +255,10 @@ export default function AdminDashboard() {
         })
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: await res.text() || 'An error occurred' };
-      }
+      // 204 No Content carries no body, so only parse when there is one.
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
 
-      if (res.ok && data.success) {
+      if (res.ok) {
         setStatusMsg({ text: 'Entry published successfully!', type: 'success' });
         // Reset form
         setFullName('');
@@ -282,16 +280,12 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to delete this record?')) return;
 
     try {
-      const res = await fetch(`/api/directory?id=${id}&category=${category}`, {
+      const res = await fetch(`/api/directory/${id}`, {
         method: 'DELETE',
       });
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: await res.text() || 'An error occurred' };
-      }
-      if (res.ok && data.success) {
+      // 204 No Content carries no body, so only parse when there is one.
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+      if (res.ok) {
         // Trigger a re-fetch
         setRecords(prev => ({
           ...prev,

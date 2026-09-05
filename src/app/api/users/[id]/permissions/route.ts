@@ -1,28 +1,12 @@
-import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { auth } from '@clerk/nextjs/server';
+import { getActor } from '@/server/auth';
+import { respond } from '@/server/http';
+import { updateUserPermissions } from '@/domain/user/service';
 
-export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
-  try {
-    const params = await props.params;
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+type Params = { params: Promise<{ id: string }> };
 
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!dbUser || (dbUser.role !== 'ADMIN' && dbUser.role !== 'SUPERADMIN')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const { canCreateEvents } = await req.json();
-
-    const updatedUser = await prisma.user.update({
-      where: { id: params.id },
-      data: { canCreateEvents }
-    });
-
-    return NextResponse.json({ success: true, user: updatedUser });
-  } catch (error) {
-    console.error("Error updating user permissions:", error);
-    return NextResponse.json({ error: 'Failed to update permissions' }, { status: 500 });
-  }
+export async function PATCH(request: Request, { params }: Params) {
+  const { id } = await params;
+  const actor = await getActor();
+  const result = await updateUserPermissions(actor, id, await request.json().catch(() => null));
+  return respond(result);
 }

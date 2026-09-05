@@ -47,3 +47,4 @@ next-env.d.ts
 
 # generated prisma client
 /src/generated/prisma
+coverage/

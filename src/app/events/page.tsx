@@ -30,7 +30,7 @@ export default function EventsPage() {
     try {
       const res = await fetch('/api/events');
       const data = await res.json();
-      if (data.events) setEvents(data.events);
+      if (Array.isArray(data)) setEvents(data);
     } catch (e) {
       console.error("Failed to fetch events", e);
     }
@@ -43,8 +43,8 @@ export default function EventsPage() {
     fetch('/api/users/me')
       .then(res => res.json())
       .then(data => {
-        if (data.user) {
-          setCanCreate(data.user.role === 'ADMIN' || data.user.role === 'SUPERADMIN' || data.user.canCreateEvents);
+        if (data) {
+          setCanCreate(data.role === 'ADMIN' || data.role === 'SUPERADMIN' || data.canCreateEvents);
         }
       })
       .catch(e => console.error(e));

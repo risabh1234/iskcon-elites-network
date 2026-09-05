@@ -36,12 +36,8 @@ export default function AddEntryModal({ isSignedIn, onClose, onSuccess }: AddEnt
 
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: await res.text() || 'An error occurred' };
-      }
+      // 204 No Content carries no body, so only parse when there is one.
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
       if (data.url) setImageUrl(data.url);
     } catch (err) {
       console.error('Upload interface error:', err);
@@ -72,14 +68,10 @@ export default function AddEntryModal({ isSignedIn, onClose, onSuccess }: AddEnt
         }),
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: await res.text() || 'An error occurred' };
-      }
+      // 204 No Content carries no body, so only parse when there is one.
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
 
-      if (res.ok && data.success) {
+      if (res.ok) {
         onSuccess();
       } else {
         setErrorMsg(data.error || 'Failed to submit entry');

@@ -7,10 +7,13 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
-    "ci": "npm run check:design && npm run lint && npm run build",
+    "ci": "npm run check:design && npm run lint && npm run test:coverage && npm run build",
     "build:cloudflare": "npx @opennextjs/cloudflare build",
     "check:design": "node scripts/check-design-literals.mjs",
-    "check:a11y": "node scripts/a11y-check.mjs"
+    "check:a11y": "node scripts/a11y-check.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
@@ -41,16 +44,18 @@
     "@fontsource-variable/noto-serif-devanagari": "^5.3.0",
     "@opennextjs/cloudflare": "^1.20.1",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.20.1",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^5.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "playwright": "^1.63.0",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vitest": "^5.0.0",
     "wrangler": "^4.106.0"
   }
 }

@@ -36,13 +36,13 @@ export default function DirectoryClient({ initialMembers, isAdmin }: { initialMe
   const [editingMember, setEditingMember] = useState<DirectoryMember | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  const handleDelete = async (id: string, roleType: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, _roleType: string, e: React.MouseEvent) => {
     e.preventDefault();
     if (!confirm("Are you sure you want to delete this profile?")) return;
 
     setIsDeleting(id);
     try {
-      const res = await fetch(`/api/directory/${id}?type=${roleType}`, {
+      const res = await fetch(`/api/directory/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {

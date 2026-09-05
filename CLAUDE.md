@@ -33,6 +33,8 @@ npm run build            # prisma generate && next build
 npm run lint             # eslint .
 npm run check:design     # fails on any hardcoded colour/px/ms/radius/gradient
 npm run check:a11y       # axe-core against /design-system (needs `npm run dev` running)
+npm run test             # vitest
+npm run test:coverage    # vitest with the 80% domain threshold
 npm run ci               # check:design + lint + build
 npm run build:cloudflare # opennextjs-cloudflare build  (output: .open-next/, gitignored)
 npx prisma generate      # after any schema change
@@ -89,6 +91,28 @@ inventing layout, the missing thing is a pattern.
 there before checking it in a page, and run `npm run check:a11y` against it. It is dev-only:
 `notFound()` in production, and excluded from the proxy matcher. It is **not** `/_design`, because a
 leading underscore marks a private folder that the App Router excludes from routing entirely.
+
+## Backend
+
+```
+Route handler / Server Action     adapter: parse, getActor(), map the Result. Under 30 lines.
+        ↓
+domain/<x>/service.ts             can() FIRST, then rules, then revalidate tags
+        ↓
+domain/<x>/repository.ts          the only file that touches Prisma
+        ↓
+Result<Dto, AppError>             never throw across the boundary
+```
+
+- `server/policy.ts` holds every authorisation rule in one `can(actor, action, resource)`. It is
+  pure — no database, no Clerk — which is why every (role × action × ownership) combination is
+  covered by tests. **Never write a role comparison anywhere else.**
+- `server/auth.ts` is the only module that reads Clerk. `getActor()` resolves a session to an
+  `Actor`; `ensureActor()` creates a missing local row, always as `USER`.
+- `server/errors.ts` maps each error kind to an HTTP status and a message safe to show a stranger.
+  `cause` is for logs and is never serialised.
+- Mutating services short-circuit on `actor.kind !== 'user'` before any query (ADR-0015).
+- Responses are DTOs. `clerkId` never leaves the server; contact email is member-visible only.
 
 ## Design direction — "Quiet Institution"
 

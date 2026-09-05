@@ -1,12 +1,12 @@
-import { auth } from "@clerk/nextjs/server";
 import { ShieldAlert } from "lucide-react";
 
-import prisma from "@/lib/prisma";
+import { getActor } from "@/server/auth";
+import { can } from "@/server/policy";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { userId } = await auth();
+  const actor = await getActor();
 
-  if (!userId) {
+  if (actor.kind !== 'user') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-white relative overflow-hidden min-h-[70vh]">
         {/* Subtle radial gradient background */}
@@ -38,9 +38,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
-  const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
-  
-  if (!dbUser || (dbUser.role !== 'ADMIN' && dbUser.role !== 'SUPERADMIN')) {
+  if (!can(actor, 'admin:access')) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-white relative overflow-hidden min-h-[70vh]">
         {/* Subtle radial gradient background */}

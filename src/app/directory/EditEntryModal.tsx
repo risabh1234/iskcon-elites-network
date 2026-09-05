@@ -68,14 +68,10 @@ export default function EditEntryModal({ member, onClose, onSuccess }: EditEntry
         }),
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: await res.text() || 'An error occurred' };
-      }
+      // 204 No Content carries no body, so only parse when there is one.
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
 
-      if (res.ok && data.success) {
+      if (res.ok) {
         onSuccess();
       } else {
         setErrorMsg(data.error || 'Failed to update entry');

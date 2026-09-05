@@ -148,3 +148,37 @@ decorative-icon only, and every placeholder moved to `--color-ink-subtle`: disab
 exempt from the contrast requirement, placeholders are not. The same run found two genuine bugs in
 the existing footer — social links with no accessible name, and white on the old brand saffron at
 2.75:1 — which were fixed in place because they affect every page today.
+
+## ADR-0014 — Caching stays on `unstable_cache` until Cache Components is a deliberate choice
+**Date:** 2026-09-05 · **Status:** Accepted
+
+Next 16 supersedes `unstable_cache` with the `use cache` directive, but `use cache` is a Cache
+Components feature gated behind `cacheComponents: true`, which changes rendering and caching
+semantics for the entire application — including the seven legacy pages Phase 5 has not reached.
+`src/server/cache.ts` therefore wraps the documented previous model, and every call site goes
+through `cached()` and `invalidate()` so the migration is a change to one file rather than thirty.
+The one Next 16 change adopted immediately is the two-argument `revalidateTag(tag, 'max')`: the
+single-argument form is deprecated, and `'max'` gives stale-while-revalidate so a write does not
+make the next reader wait on a cold query.
+
+## ADR-0015 — Anonymous mutations are refused before the database is touched
+**Date:** 2026-09-05 · **Status:** Accepted
+
+Ownership cannot be evaluated without reading the record, so `updateMember`, `deleteMember` and
+their equivalents load the row and then call `can()`. A live smoke test showed the cost of that
+ordering: with the database unreachable, anonymous requests to those endpoints returned 500 rather
+than 401, because the query ran before anyone asked whether the caller could possibly be permitted.
+Each mutating service now short-circuits on `actor.kind !== 'user'` first — an anonymous caller can
+never own anything — which makes the status correct and means an unauthenticated flood costs a
+comparison rather than a query. The cost is one extra line per mutation, and the rule that it must
+be added to every new one.
+
+## ADR-0016 — Member contact addresses are visible to signed-in members
+**Date:** 2026-09-05 · **Status:** Accepted, revisitable
+
+ADR-0008 left open who may see a member's email after the hotfix stopped serving unapproved
+profiles publicly. The DTO layer now answers it: any signed-in member can see another member's
+address, and anonymous visitors cannot — the register exists so that the network can reach itself,
+but a public page that lists addresses is a harvesting target. This lives in exactly one function,
+`canSeeContact` in `src/domain/member/dto.ts`, so narrowing it to owner-and-admin or opening it to
+everyone is a one-line change. Worth confirming with the network's own expectations.

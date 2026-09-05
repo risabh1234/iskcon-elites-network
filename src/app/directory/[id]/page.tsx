@@ -1,8 +1,8 @@
 import { Metadata } from "next";
-import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
+import { getActor } from "@/server/auth";
+import { getMember } from "@/domain/member/service";
 import { ArrowLeft, GraduationCap, Calendar } from "lucide-react";
 
 type Props = {
@@ -11,22 +11,15 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  let member = null;
-  try {
-    member = await prisma.alumnus.findUnique({ where: { id } });
-    if (!member) {
-      member = await prisma.speaker.findUnique({ where: { id } });
-    }
-  } catch {
-    // Database connection issue
+  // Anonymous on purpose: metadata is public, so an unpublished profile must
+  // not contribute a title even when an admin is the one requesting the page.
+  const result = await getMember({ kind: 'anonymous' }, id);
+
+  if (!result.ok) {
+    return { title: "Profile Not Found | ISKCON Elites" };
   }
 
-  // Metadata is public by definition, so an unreviewed profile never contributes one.
-  if (!member || !member.isApproved) {
-    return {
-      title: "Profile Not Found | ISKCON Elites",
-    };
-  }
+  const member = result.value;
 
   return {
     title: `${member.name} | ISKCON Elites Network`,
@@ -41,31 +34,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function AlumnusProfilePage({ params }: Props) {
   const { id } = await params;
-  
-  let member: { id: string; name: string; avatarUrl: string | null; bio: string; isApproved: boolean; category?: string; cohort?: string; title?: string } | null = null;
-  let roleType = 'Alumni';
-  let isAdmin = false;
 
-  try {
-    const { userId } = await auth();
-    if (userId) {
-      const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
-      isAdmin = !!dbUser && (dbUser.role === 'ADMIN' || dbUser.role === 'SUPERADMIN');
-    }
+  // The service decides visibility: published to anyone, unpublished to
+  // reviewers, and NotFound rather than Forbidden so that the existence of an
+  // unreviewed profile is not itself disclosed.
+  const result = await getMember(await getActor(), id);
+  if (!result.ok) notFound();
 
-    member = await prisma.alumnus.findUnique({ where: { id } });
-    if (!member) {
-      member = await prisma.speaker.findUnique({ where: { id } });
-      roleType = 'Speaker';
-    }
-  } catch {
-    // DB not connected
-  }
-
-  // A profile awaiting review is not public. Admins can still open it to review it.
-  if (!member || (!member.isApproved && !isAdmin)) {
-    notFound();
-  }
+  const member = result.value;
+  const roleType = member.roleType;
 
   return (
     <div className="container mx-auto px-6 py-12 flex-1 max-w-4xl">

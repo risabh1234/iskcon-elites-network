@@ -18,9 +18,9 @@ export default function Home() {
     fetch('/api/directory')
       .then(res => res.json())
       .then(data => {
-        const alumni = (data.alumni || []).filter((a: any) => a.isApproved !== false);
-        const speakers = (data.speakers || []).filter((s: any) => s.isApproved !== false);
-        const combined = [...alumni, ...speakers];
+        // The API now returns a flat, already-filtered list of published
+        // members. It no longer ships unapproved rows for the client to hide.
+        const combined = Array.isArray(data) ? data : [];
 
         if (combined.length > 0) {
           const formattedProfiles = combined.slice(0, 7).map((p: any) => ({
