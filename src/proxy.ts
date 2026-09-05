@@ -1,43 +1,36 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import type { NextFetchEvent, NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { SESSION_COOKIE } from '@/server/auth/session';
 
-const isProtectedRoute = createRouteMatcher(['/admin(.*)', '/api/admin(.*)']);
-
-// The component gallery is an internal review surface, not a page.
-//
-// Not named `_design`: a leading underscore marks a *private folder* in the App
-// Router, which excludes the directory from routing entirely — the page would
-// never have resolved to a URL at all.
-const isDevOnlyRoute = createRouteMatcher(['/design-system(.*)']);
+const ADMIN = /^\/(admin|api\/admin)(\/|$)/;
+const DEV_ONLY = /^\/design-system(\/|$)/;
 
 /**
- * Next 16 renamed the `middleware` convention to `proxy`. Clerk still ships
- * `clerkMiddleware` as its API — it returns a request handler — so only the file
- * and export name change.
+ * Next 16 renamed the `middleware` convention to `proxy`.
  *
- * The dev-only branch runs *before* Clerk rather than inside it, for two reasons:
- * a 404 must be a real 404 status (a page calling notFound() streams its
- * response and so answers 200, which is a soft 404 a crawler will index), and
- * the gallery needs no session, so routing it through Clerk only buys a
- * handshake round trip.
+ * This is a coarse gate only. It checks that a session cookie is *present* and
+ * redirects if not — it does not validate the session or read a role, because
+ * the proxy runs on every request and a database round trip here would tax the
+ * whole site. Real authorisation is `can()` inside the services, and the admin
+ * layout re-checks with a resolved Actor. A forged cookie gets past this line
+ * and is refused by the next one.
  */
-const withClerk = clerkMiddleware(async (auth, req: NextRequest) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect();
-  }
+export function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-  return NextResponse.next();
-});
-
-export function proxy(req: NextRequest, event: NextFetchEvent) {
-  if (isDevOnlyRoute(req)) {
+  if (DEV_ONLY.test(pathname)) {
     return process.env.NODE_ENV === 'production'
       ? new NextResponse(null, { status: 404 })
       : NextResponse.next();
   }
 
-  return withClerk(req, event);
+  if (ADMIN.test(pathname) && !req.cookies.get(SESSION_COOKIE)) {
+    const signIn = new URL('/sign-in', req.url);
+    signIn.searchParams.set('redirectTo', pathname);
+    return NextResponse.redirect(signIn);
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

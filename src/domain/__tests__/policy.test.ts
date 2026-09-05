@@ -14,8 +14,8 @@ const anon: Actor = { kind: 'anonymous' };
 function user(role: Role, opts: { id?: string; canCreateEvents?: boolean } = {}): Actor {
   return {
     kind: 'user',
+    name: null,
     id: opts.id ?? 'u1',
-    clerkId: 'clerk_1',
     email: 'a@example.com',
     role,
     canCreateEvents: opts.canCreateEvents ?? false,

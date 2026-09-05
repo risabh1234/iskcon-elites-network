@@ -2,7 +2,6 @@ import { can, type Actor, type Role } from '@/server/policy';
 import { forbidden, notFound, unauthenticated, validation, conflict, internal } from '@/server/errors';
 import { err, ok, type Result } from '@/server/result';
 import { invalidate, tags } from '@/server/cache';
-import { deleteClerkUser, listClerkUsers } from '@/server/auth';
 import * as repo from './repository';
 import { toUserDto, type SelfDto, type UserDto } from './dto';
 import { updatePermissionsSchema, updateRoleSchema } from './schema';
@@ -27,24 +26,6 @@ export async function listUsers(actor: Actor): Promise<Result<UserDto[]>> {
   if (!can(actor, 'user:read')) return err(forbidden());
   const rows = await repo.listUsers();
   return ok(rows.map(toUserDto));
-}
-
-/**
- * Reconciles the local table with Clerk. Split out of the list handler on
- * purpose: it used to run inside a GET, so simply opening the admin dashboard
- * wrote to the database on every page load.
- */
-export async function syncFromClerk(actor: Actor): Promise<Result<{ synced: number }>> {
-  if (!can(actor, 'user:read')) return err(forbidden());
-
-  try {
-    const clerkUsers = await listClerkUsers();
-    const synced = await repo.upsertFromClerk(clerkUsers);
-    invalidate(tags.users());
-    return ok({ synced });
-  } catch (cause) {
-    return err(internal('Could not reach the identity provider.', { cause }));
-  }
 }
 
 export async function updateUserRole(
@@ -131,17 +112,11 @@ export async function deleteUser(actor: Actor, targetUserId: string): Promise<Re
   }
 
   try {
+    // Sessions and linked social accounts cascade, so the user is signed out
+    // everywhere by the same statement that removes them.
     await repo.deleteUser(targetUserId);
   } catch (cause) {
     return err(internal('The user could not be removed.', { cause }));
-  }
-
-  // Clerk is best-effort: the local record is the source of truth for access,
-  // and a failure here must not leave the caller thinking nothing happened.
-  try {
-    await deleteClerkUser(target.clerkId);
-  } catch {
-    // Intentionally swallowed; the local deletion already succeeded.
   }
 
   invalidate(tags.users());

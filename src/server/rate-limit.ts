@@ -22,6 +22,9 @@ export type RateLimitOptions = {
 };
 
 export const LIMITS = {
+  // Sign-in and registration are the endpoints worth guessing against, so they
+  // get the tightest window in the app.
+  auth: { limit: 10, windowMs: 15 * 60_000 },
   upload: { limit: 20, windowMs: 60_000 },
   mutation: { limit: 60, windowMs: 60_000 },
   adminMutation: { limit: 120, windowMs: 60_000 },

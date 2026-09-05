@@ -5,7 +5,7 @@ type Level = 'debug' | 'info' | 'warn' | 'error';
 /**
  * Structured JSON logs, request-scoped.
  *
- * Never log PII. Emails, names, bios and Clerk ids identify a real person, and
+ * Never log PII. Emails, names, bios and session tokens identify a real person, and
  * a log line outlives the request by months — `actorId` is enough to answer
  * "who did this" without putting the answer in plain text.
  */

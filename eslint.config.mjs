@@ -11,9 +11,9 @@ import nextTs from "eslint-config-next/typescript";
  *
  * These are not stylistic. Business rules that import a React component cannot
  * be unit-tested or reused from a script; Prisma calls scattered outside the
- * repositories cannot be cached or audited in one place; and Clerk read from
- * sixteen files is how one endpoint ended up comparing against a different role
- * vocabulary than the other fifteen (docs/AUDIT.md §3).
+ * repositories cannot be cached or audited in one place; and an auth provider
+ * read from sixteen files is how one endpoint ended up comparing against a
+ * different role vocabulary than the other fifteen (docs/AUDIT.md §3).
  *
  * NOTE ON ORDERING: flat config does not merge rule options — for a given file
  * the LAST matching block wins outright. So each exemption below re-declares
@@ -34,11 +34,17 @@ const PRISMA = [
   },
 ];
 
-const CLERK = [
+// Session and password internals are reached through server/auth/*, never
+// directly, so "who is the caller" has exactly one answer in the codebase.
+const SESSION = [
   {
-    name: "@clerk/nextjs/server",
+    name: "@/server/auth/session",
     message:
-      "Only server/auth.ts may read Clerk. Use getActor() and can() so authorisation lives in one place.",
+      "Only server/auth.ts and domain/auth/* may touch sessions. Use getActor() elsewhere.",
+  },
+  {
+    name: "@/server/auth/password",
+    message: "Password hashing belongs to domain/auth/service.ts.",
   },
 ];
 
@@ -68,36 +74,36 @@ const boundaries = [
   {
     name: "boundaries/baseline",
     files: ["src/**/*.ts", "src/**/*.tsx"],
-    rules: restrict([...PRISMA, ...CLERK]),
+    rules: restrict([...PRISMA, ...SESSION]),
   },
   // 2. domain/ additionally may not reach for the UI.
   {
     name: "boundaries/domain",
     files: ["src/domain/**/*.ts", "src/domain/**/*.tsx"],
-    rules: restrict([...PRISMA, ...CLERK], NO_UI_FROM_DOMAIN),
+    rules: restrict([...PRISMA, ...SESSION], NO_UI_FROM_DOMAIN),
   },
   // 3. Repositories are the one place Prisma is allowed.
   {
     name: "boundaries/repository",
     files: ["src/domain/*/repository.ts"],
-    rules: restrict([...CLERK], NO_UI_FROM_DOMAIN),
+    rules: restrict([...SESSION], NO_UI_FROM_DOMAIN),
   },
   // 4. The Prisma singleton itself.
   {
     name: "boundaries/prisma-singleton",
     files: ["src/lib/prisma.ts"],
-    rules: restrict([...CLERK]),
+    rules: restrict([...SESSION]),
   },
-  // 5. proxy.ts is the framework's entry point for clerkMiddleware.
+  // 5. proxy.ts reads the cookie NAME only, never the session itself.
   {
     name: "boundaries/proxy",
     files: ["src/proxy.ts"],
     rules: restrict([...PRISMA]),
   },
-  // 6. server/auth.ts resolves a Clerk session into an Actor, so it needs both.
+  // 6. The auth layer is what these rules exist to funnel everything through.
   {
     name: "boundaries/auth",
-    files: ["src/server/auth.ts"],
+    files: ["src/server/auth.ts", "src/server/auth/*.ts", "src/domain/auth/*.ts"],
     rules: { "no-restricted-imports": "off" },
   },
 ];

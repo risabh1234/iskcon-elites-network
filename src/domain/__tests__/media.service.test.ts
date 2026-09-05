@@ -8,7 +8,7 @@ import { uploadImage } from '@/domain/media/service';
 import { resetRateLimits } from '@/server/rate-limit';
 
 const anon: Actor = { kind: 'anonymous' };
-const member: Actor = { kind: 'user', id: 'u1', clerkId: 'c1', email: 'u@e.com', role: 'USER', canCreateEvents: false };
+const member: Actor = { kind: 'user', name: null, id: 'u1', email: 'u@e.com', role: 'USER', canCreateEvents: false };
 
 const image = (name = 'portrait.jpg', type = 'image/jpeg', bytes = 1024) =>
   new File([new Uint8Array(bytes)], name, { type });

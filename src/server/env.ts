@@ -19,8 +19,10 @@ const serverSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   DIRECT_URL: z.string().min(1).optional(),
 
-  // Clerk.
-  CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
+  // Google Sign-In. Optional: the button is hidden until both are present, so
+  // the app runs on email and password alone until the keys are added.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
 
   // Supabase. The service-role key is the current upload path's credential and
   // must never reach the client — note the deliberate absence of NEXT_PUBLIC_.
@@ -35,8 +37,9 @@ const serverSchema = z.object({
 });
 
 const clientSchema = z.object({
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1, 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required'),
   NEXT_PUBLIC_SUPABASE_URL: url.optional().or(z.literal('')),
+  /** Absolute origin, used to build the OAuth redirect URI in production. */
+  NEXT_PUBLIC_SITE_URL: url.optional().or(z.literal('')),
 });
 
 /**
@@ -44,8 +47,8 @@ const clientSchema = z.object({
  * literally, so client keys are read by their full name rather than destructured.
  */
 const rawClient = {
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
 };
 
 function format(issues: z.core.$ZodIssue[]): string {

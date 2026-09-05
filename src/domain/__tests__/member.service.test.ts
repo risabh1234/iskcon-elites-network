@@ -21,11 +21,11 @@ import * as service from '@/domain/member/service';
 
 const anon: Actor = { kind: 'anonymous' };
 const member: Actor = {
-  kind: 'user', id: 'u1', clerkId: 'c1', email: 'u@example.com',
+  kind: 'user', name: null, id: 'u1', email: 'u@example.com',
   role: 'USER', canCreateEvents: false,
 };
 const admin: Actor = {
-  kind: 'user', id: 'a1', clerkId: 'c2', email: 'a@example.com',
+  kind: 'user', name: null, id: 'a1', email: 'a@example.com',
   role: 'ADMIN', canCreateEvents: true,
 };
 

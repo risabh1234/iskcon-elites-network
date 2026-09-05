@@ -14,9 +14,9 @@ import * as repo from '@/domain/event/repository';
 import * as service from '@/domain/event/service';
 
 const anon: Actor = { kind: 'anonymous' };
-const member: Actor = { kind: 'user', id: 'u1', clerkId: 'c1', email: 'u@e.com', role: 'USER', canCreateEvents: false };
-const organiser: Actor = { kind: 'user', id: 'o1', clerkId: 'c2', email: 'o@e.com', role: 'USER', canCreateEvents: true };
-const admin: Actor = { kind: 'user', id: 'a1', clerkId: 'c3', email: 'a@e.com', role: 'ADMIN', canCreateEvents: true };
+const member: Actor = { kind: 'user', name: null, id: 'u1', email: 'u@e.com', role: 'USER', canCreateEvents: false };
+const organiser: Actor = { kind: 'user', name: null, id: 'o1', email: 'o@e.com', role: 'USER', canCreateEvents: true };
+const admin: Actor = { kind: 'user', name: null, id: 'a1', email: 'a@e.com', role: 'ADMIN', canCreateEvents: true };
 
 const rec = (over = {}) => ({
   id: 'e1', title: 'Annual gathering', location: 'Mumbai',

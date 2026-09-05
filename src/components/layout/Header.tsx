@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { UserMenu } from "@/components/auth/UserMenu";
 import { motion, AnimatePresence } from "framer-motion";
 import { GraduationCap, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export default function Header() {
-  const { isLoaded, userId } = useAuth();
+export type HeaderUser = { name: string | null; email: string };
+
+export default function Header({ user }: { user: HeaderUser | null }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -62,7 +63,7 @@ export default function Header() {
 
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-4">
-            {isLoaded && !userId && (
+            {!user && (
               <div className="flex items-center gap-3">
                 <Link href="/sign-in" className="px-5 py-2.5 text-sm font-medium text-white border border-white/20 rounded-full hover:bg-white/10 transition-colors">
                   Login
@@ -72,16 +73,12 @@ export default function Header() {
                 </Link>
               </div>
             )}
-            {isLoaded && userId && (
-              <UserButton appearance={{ elements: { avatarBox: "w-10 h-10 border-2 border-[#C5A059]" } }} />
-            )}
+            {user && <UserMenu name={user.name} email={user.email} />}
           </div>
 
           {/* Mobile Menu Toggle */}
           <div className="flex lg:hidden items-center gap-4">
-            {isLoaded && userId && (
-              <UserButton appearance={{ elements: { avatarBox: "w-9 h-9" } }} />
-            )}
+            {user && <UserMenu name={user.name} email={user.email} compact />}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
               className="p-2 text-white hover:text-[#C5A059] bg-white/5 rounded-lg border border-white/10 transition-colors"
@@ -124,7 +121,7 @@ export default function Header() {
 
             {/* Auth Buttons */}
             <div className="mt-auto flex flex-col gap-4 px-6 pb-12">
-              {isLoaded && !userId && (
+              {!user && (
                 <>
                   <Link href="/sign-in" onClick={() => setIsMobileMenuOpen(false)} className="w-full py-4 text-center text-lg font-medium text-white border border-white/20 rounded-2xl hover:bg-white/5 transition-colors">
                     Login

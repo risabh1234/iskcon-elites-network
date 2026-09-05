@@ -4,7 +4,6 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, GraduationCap, Mic, Plus, Trash2, Edit2 } from "lucide-react";
 import Link from "next/link";
-import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import AddEntryModal from "./AddEntryModal";
 import EditEntryModal from "./EditEntryModal";
@@ -26,8 +25,7 @@ export type DirectoryMember = {
   isApproved?: boolean;
 };
 
-export default function DirectoryClient({ initialMembers, isAdmin }: { initialMembers: DirectoryMember[], isAdmin?: boolean }) {
-  const { isSignedIn } = useUser();
+export default function DirectoryClient({ initialMembers, isAdmin, isSignedIn }: { initialMembers: DirectoryMember[], isAdmin?: boolean, isSignedIn?: boolean }) {
   const router = useRouter();
 
   const [search, setSearch] = useState("");

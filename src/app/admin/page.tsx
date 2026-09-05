@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { UserButton } from '@clerk/nextjs';
 import { Trash2, Edit2 } from 'lucide-react';
 import EditEntryModal from '../directory/EditEntryModal';
 import { DirectoryMember } from '../directory/DirectoryClient';
@@ -24,7 +23,7 @@ export default function AdminDashboard() {
   const [editingMember, setEditingMember] = useState<DirectoryMember | null>(null);
 
   // Admin / User Management State
-  type UserType = { id: string; clerkId: string; email: string; username?: string; role: 'USER' | 'ADMIN' | 'SUPERADMIN'; canCreateEvents: boolean; createdAt: string };
+  type UserType = { id: string; email: string; username?: string; name?: string | null; role: 'USER' | 'ADMIN' | 'SUPERADMIN'; canCreateEvents: boolean; createdAt: string };
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [activeTab, setActiveTab] = useState<'directory' | 'users' | 'events'>('directory');
@@ -311,7 +310,6 @@ export default function AdminDashboard() {
             <h1 className="text-sm font-medium tracking-tight text-zinc-300">Platform Management</h1>
           </div>
           <div className="flex items-center gap-4">
-            <UserButton />
           </div>
         </div>
       </header>
@@ -516,7 +514,6 @@ export default function AdminDashboard() {
                 <thead>
                   <tr className="border-b border-white/10 text-[#C5C6C7] text-xs uppercase tracking-wider">
                     <th className="pb-3 font-medium px-4">User</th>
-                    <th className="pb-3 font-medium px-4">Clerk ID</th>
                     <th className="pb-3 font-medium px-4">Role</th>
                     <th className="pb-3 font-medium px-4">Event Perms</th>
                     <th className="pb-3 font-medium px-4">Joined</th>
@@ -530,7 +527,6 @@ export default function AdminDashboard() {
                         <div className="font-medium">{user.username || 'Unknown'}</div>
                         <div className="text-xs text-zinc-500">{user.email}</div>
                       </td>
-                      <td className="py-3 px-4 text-zinc-500 font-mono text-xs">{user.clerkId.substring(0, 12)}...</td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                           user.role === 'SUPERADMIN' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :

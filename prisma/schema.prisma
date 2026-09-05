@@ -7,24 +7,68 @@ datasource db {
 }
 
 // ------------------------------------------------------
-// 1. IAM & Security (Maps to Clerk Auth)
+// 1. Identity & sessions (first-party; no external auth provider)
 // ------------------------------------------------------
- model User {
- id String @id @default(uuid())
- clerkId String @unique
- email String @unique
- username String?
- role Role @default(USER)
- createdAt DateTime @default(now())
+model User {
+  id       String  @id @default(uuid())
+  // Stored lower-cased so that a@Example.com and a@example.com are one person.
+  email    String  @unique
+  username String?
+  name     String?
 
- // Audit Relations
- alumni Alumnus[]
- speakers Speaker[]
- testimonials Testimonial[]
- events Event[]
- 
- // Permissions
- canCreateEvents Boolean @default(false)
+  // Null for accounts that only ever sign in with a social provider.
+  // PBKDF2-HMAC-SHA256; see src/server/auth/password.ts for the encoding.
+  passwordHash String?
+
+  emailVerifiedAt DateTime?
+
+  role            Role    @default(USER)
+  canCreateEvents Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  // Audit relations
+  alumni       Alumnus[]
+  speakers     Speaker[]
+  testimonials Testimonial[]
+  events       Event[]
+
+  @@index([role])
+}
+
+/// A social identity linked to a User. One row per provider per user.
+model Account {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String
+  providerAccountId String
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+/// An active sign-in.
+///
+/// The cookie carries a random token; only its SHA-256 hash is stored, so a
+/// database leak does not hand out live sessions.
+model Session {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 enum Role {

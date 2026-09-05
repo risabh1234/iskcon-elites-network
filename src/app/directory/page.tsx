@@ -46,7 +46,7 @@ export default async function DirectoryPage() {
         </p>
       </div>
 
-      <DirectoryClient initialMembers={members} isAdmin={isAdmin} />
+      <DirectoryClient initialMembers={members} isAdmin={isAdmin} isSignedIn={actor.kind === 'user'} />
     </div>
   );
 }

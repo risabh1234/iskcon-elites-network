@@ -4,20 +4,18 @@ import type { Actor } from '@/server/policy';
 vi.mock('@/domain/user/repository', () => ({
   listUsers: vi.fn(), findUserById: vi.fn(), updateRole: vi.fn(),
   updatePermissions: vi.fn(), deleteUser: vi.fn(), countAdmins: vi.fn(),
-  upsertFromClerk: vi.fn(),
 }));
-vi.mock('@/server/auth', () => ({ deleteClerkUser: vi.fn(), listClerkUsers: vi.fn() }));
 vi.mock('@/server/cache', () => ({ invalidate: vi.fn(), tags: { users: () => 'users' } }));
 
 import * as repo from '@/domain/user/repository';
 import * as service from '@/domain/user/service';
 
-const member: Actor = { kind: 'user', id: 'u1', clerkId: 'c1', email: 'u@e.com', role: 'USER', canCreateEvents: false };
-const admin: Actor = { kind: 'user', id: 'a1', clerkId: 'c2', email: 'a@e.com', role: 'ADMIN', canCreateEvents: true };
-const superadmin: Actor = { kind: 'user', id: 's1', clerkId: 'c3', email: 's@e.com', role: 'SUPERADMIN', canCreateEvents: true };
+const member: Actor = { kind: 'user', name: null, id: 'u1', email: 'u@e.com', role: 'USER', canCreateEvents: false };
+const admin: Actor = { kind: 'user', name: null, id: 'a1', email: 'a@e.com', role: 'ADMIN', canCreateEvents: true };
+const superadmin: Actor = { kind: 'user', name: null, id: 's1', email: 's@e.com', role: 'SUPERADMIN', canCreateEvents: true };
 
 const rec = (over = {}) => ({
-  id: 'u2', clerkId: 'c9', email: 'target@e.com', username: 'target',
+  id: 'u2', email: 'target@e.com', username: 'target',
   role: 'USER', canCreateEvents: false, createdAt: new Date('2026-01-01'), ...over,
 });
 
@@ -28,11 +26,11 @@ describe('listUsers', () => {
     expect((await service.listUsers(member)).ok).toBe(false);
   });
 
-  it('never returns the Clerk id', async () => {
+  it('never returns the password hash', async () => {
     vi.mocked(repo.listUsers).mockResolvedValue([rec() as never]);
     const result = await service.listUsers(admin);
     expect(result.ok).toBe(true);
-    if (result.ok) expect('clerkId' in result.value[0]!).toBe(false);
+    if (result.ok) expect('passwordHash' in result.value[0]!).toBe(false);
   });
 });
 
@@ -111,13 +109,11 @@ describe('deleteUser', () => {
     if (!result.ok) expect(result.error.kind).toBe('NotFound');
   });
 
-  it('still succeeds when the identity provider deletion fails', async () => {
-    const { deleteClerkUser } = await import('@/server/auth');
+  it('removes the user, cascading their sessions', async () => {
     vi.mocked(repo.findUserById).mockResolvedValue(rec() as never);
     vi.mocked(repo.countAdmins).mockResolvedValue(2);
-    vi.mocked(deleteClerkUser).mockRejectedValue(new Error('clerk down'));
-    // Local access is already revoked; reporting failure would be misleading.
     expect((await service.deleteUser(admin, 'u2')).ok).toBe(true);
+    expect(repo.deleteUser).toHaveBeenCalledWith('u2');
   });
 });
 
@@ -128,7 +124,7 @@ describe('getSelf', () => {
     if (result.ok) expect(result.value).toBeNull();
   });
 
-  it('never exposes the email or Clerk id', () => {
+  it('never exposes the email or the password hash', () => {
     const result = service.getSelf(admin);
     if (result.ok && result.value) {
       expect(Object.keys(result.value).sort()).toEqual(['canCreateEvents', 'id', 'role']);
@@ -159,34 +155,5 @@ describe('updateUserPermissions', () => {
     vi.mocked(repo.findUserById).mockResolvedValue(rec() as never);
     expect((await service.updateUserPermissions(admin, 'u2', { canCreateEvents: true })).ok).toBe(true);
     expect(repo.updatePermissions).toHaveBeenCalledWith('u2', true);
-  });
-});
-
-describe('syncFromClerk', () => {
-  it('is admins only', async () => {
-    expect((await service.syncFromClerk(member)).ok).toBe(false);
-  });
-
-  it('upserts every Clerk user and reports the count', async () => {
-    const { listClerkUsers } = await import('@/server/auth');
-    vi.mocked(listClerkUsers).mockResolvedValue([
-      { clerkId: 'c1', email: 'a@e.com', username: 'a' },
-      { clerkId: 'c2', email: 'b@e.com', username: 'b' },
-    ]);
-    vi.mocked(repo.upsertFromClerk).mockResolvedValue(2);
-    const result = await service.syncFromClerk(admin);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.synced).toBe(2);
-  });
-
-  it('reports Internal when the identity provider is unreachable', async () => {
-    const { listClerkUsers } = await import('@/server/auth');
-    vi.mocked(listClerkUsers).mockRejectedValue(new Error('401 from clerk'));
-    const result = await service.syncFromClerk(admin);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe('Internal');
-      expect(result.error.message).not.toContain('clerk');
-    }
   });
 });

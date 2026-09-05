@@ -19,7 +19,7 @@ gets three sentences there.
 | Styling | Tailwind CSS **v4** — CSS-first, **no `tailwind.config`**; tokens live in `src/styles/tokens.css` |
 | Fonts | Self-hosted variable WOFF2 in `src/app/fonts/`, wired in `src/app/fonts.ts`. Newsreader (display), Inter (text), Noto Serif Devanagari. Latin and Latin-Ext load as separate faces so IAST (ā ṛ ṣ ḥ) renders |
 | Env | `src/server/env.ts` validates with zod at module load; `src/lib/prisma.ts` imports it so boot fails loudly |
-| Auth | Clerk (`@clerk/nextjs` v7) |
+| Auth | **First-party.** Email + password (PBKDF2 via Web Crypto) and optional Google Sign-In. No auth SaaS |
 | Database | Postgres on Supabase, via Prisma 7 with the `@prisma/adapter-pg` driver adapter |
 | Storage | Supabase Storage today (bucket `profiles`); Cloudflare R2 configured but unused — see `docs/AUDIT.md` §8 |
 | Deploy | OpenNext → Cloudflare Workers, via `.github/workflows/deploy.yml` on push to `main` |
@@ -35,6 +35,7 @@ npm run check:design     # fails on any hardcoded colour/px/ms/radius/gradient
 npm run check:a11y       # axe-core against /design-system (needs `npm run dev` running)
 npm run test             # vitest
 npm run test:coverage    # vitest with the 80% domain threshold
+node scripts/set-password.mjs <email> <password> [--superadmin]
 npm run ci               # check:design + lint + build
 npm run build:cloudflare # opennextjs-cloudflare build  (output: .open-next/, gitignored)
 npx prisma generate      # after any schema change
@@ -107,8 +108,14 @@ Result<Dto, AppError>             never throw across the boundary
 - `server/policy.ts` holds every authorisation rule in one `can(actor, action, resource)`. It is
   pure — no database, no Clerk — which is why every (role × action × ownership) combination is
   covered by tests. **Never write a role comparison anywhere else.**
-- `server/auth.ts` is the only module that reads Clerk. `getActor()` resolves a session to an
-  `Actor`; `ensureActor()` creates a missing local row, always as `USER`.
+- `server/auth.ts` is the only module that resolves a request to an identity. `getActor()` reads the
+  session cookie and returns an `Actor`.
+- `server/auth/password.ts` (hashing), `server/auth/session.ts` (cookies and the Session table) and
+  `server/auth/google.ts` (OAuth) are reached only through `domain/auth/service.ts`. ESLint enforces
+  it. Never hash a password or mint a session anywhere else.
+- Sessions store only the SHA-256 of the cookie value. A password change revokes every session.
+- `scripts/set-password.mjs <email> <password> [--superadmin]` is the way back in when nobody can
+  sign in; password reset by email does not exist yet (ADR-0017).
 - `server/errors.ts` maps each error kind to an HTTP status and a message safe to show a stranger.
   `cause` is for logs and is never serialised.
 - Mutating services short-circuit on `actor.kind !== 'user'` before any query (ADR-0015).
@@ -152,6 +159,22 @@ or invented members, carousels for primary content, centred paragraphs over 66ch
 ## Known-dangerous files (Phase 0 findings, not yet fixed)
 
 `promote.mjs` and `promote.ts` promote **every** user to SUPERADMIN — `updateMany` with no `where`.
-`/api/backfill` mass-approves the whole directory with no authentication. `DELETE /api/directory`
-authenticates but does not authorise. Do not run the scripts, and see `docs/AUDIT.md` §6 before
-touching the routes.
+These were all removed in the Phase 0 security hotfix; the note stays as a record of what to look
+for. See `docs/AUDIT.md` §6.
+
+## Auth setup
+
+Email and password works with no configuration. For Google Sign-In, add to `.env.local`:
+
+```
+GOOGLE_CLIENT_ID="…apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="…"
+NEXT_PUBLIC_SITE_URL="http://localhost:3000"
+```
+
+In Google Cloud Console → APIs & Services → Credentials → OAuth client ID → Web application, add
+the authorised redirect URI `<origin>/api/auth/google/callback` for every origin you use. The
+button stays hidden until both keys are present, so nothing breaks before they are.
+
+**The first account to register becomes SUPERADMIN.** That is a bootstrap for a fresh install, not a
+promotion path — register yourself first.

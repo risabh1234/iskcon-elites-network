@@ -1,8 +1,8 @@
-import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { fontVariables } from './fonts';
 import Header from '@/components/layout/Header';
+import { getActor } from '@/server/auth';
 import Footer from '@/components/layout/Footer';
 
 const SITE_NAME = 'ISKCON Elites Network';
@@ -53,29 +53,33 @@ export const viewport: Viewport = {
   colorScheme: 'light',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <ClerkProvider afterSignOutUrl="/">
-      <html lang={LOCALE} className={fontVariables}>
-        <body>
-          {/* First tab stop on every page: skip the nav, reach the content. */}
-          <a href="#main" className="skip-link">
-            Skip to content
-          </a>
+  // Reading the session here makes every route dynamic, which is the standing
+  // cost of a session-aware header. Acceptable for a members' register where
+  // the pages people actually use are dynamic already.
+  const actor = await getActor();
+  const user = actor.kind === 'user' ? { name: actor.name, email: actor.email } : null;
 
-          <div className="flex min-h-screen flex-col">
-            <Header />
-            <main id="main" tabIndex={-1} className="flex flex-1 flex-col">
-              {children}
-            </main>
-            <Footer />
-          </div>
-        </body>
-      </html>
-    </ClerkProvider>
+  return (
+    <html lang={LOCALE} className={fontVariables}>
+      <body>
+        {/* First tab stop on every page: skip the nav, reach the content. */}
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
+
+        <div className="flex min-h-screen flex-col">
+          <Header user={user} />
+          <main id="main" tabIndex={-1} className="flex flex-1 flex-col">
+            {children}
+          </main>
+          <Footer />
+        </div>
+      </body>
+    </html>
   );
 }

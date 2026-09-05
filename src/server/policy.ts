@@ -4,10 +4,10 @@
  * This module replaces twenty-one hand-written role comparisons spread across
  * twelve files (docs/AUDIT.md §3). That scattering is not a tidiness problem:
  * three of those endpoints had no authorisation at all, and one compared
- * against a different role vocabulary entirely. When the rule lives in N
+ * against a different role vocabulary belonging to the old auth provider. When the rule lives in N
  * places, endpoint N+1 is where the breach happens.
  *
- * `can()` is pure — no database, no Clerk, no request. That is what makes it
+ * `can()` is pure — no database, no session, no request. That is what makes it
  * exhaustively testable, and every (role x action x ownership) combination is
  * covered in src/domain/__tests__/policy.test.ts.
  */
@@ -19,8 +19,8 @@ export type Actor =
   | {
       kind: 'user';
       id: string;
-      clerkId: string;
       email: string;
+      name: string | null;
       role: Role;
       canCreateEvents: boolean;
     };

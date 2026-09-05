@@ -182,3 +182,47 @@ address, and anonymous visitors cannot — the register exists so that the netwo
 but a public page that lists addresses is a harvesting target. This lives in exactly one function,
 `canSeeContact` in `src/domain/member/dto.ts`, so narrowing it to owner-and-admin or opening it to
 everyone is a one-line change. Worth confirming with the network's own expectations.
+
+## ADR-0017 — Authentication is first-party; Clerk is removed
+**Date:** 2026-09-05 · **Status:** Accepted
+
+Clerk is gone from the dependency tree, the schema, the CSP and the deploy workflow, replaced by
+email-and-password sign-in with optional Google Sign-In, both owned by this codebase. Identity now
+lives in the same database as everything else, which removes the two-authorities problem the audit
+found (`docs/AUDIT.md` §3), makes the actor available without a network call, and ends the monthly
+per-seat cost — at the price of owning the security of it, which is a real cost and not a small one.
+Phase 3's boundary is what made this affordable: `getActor()` changed, and policy, services and
+adapters did not.
+
+**What is implemented:** PBKDF2-HMAC-SHA256 at 600,000 iterations via Web Crypto (bcrypt and argon2
+are native modules that do not exist on Cloudflare Workers); random 32-byte session tokens stored
+only as SHA-256 hashes; HttpOnly, Secure, SameSite=Lax cookies; rate limiting on both auth
+endpoints; identical responses and timings for "no such account" and "wrong password"; transparent
+rehash when the cost factor rises; all sessions revoked on password change; and Google OAuth with
+`state` and PKCE, linking to an existing account only when Google reports the address verified.
+
+**What is deliberately not implemented yet, and matters:** email verification for password
+registration, password reset, and a sweep for expired session rows. Until reset exists, a locked-out
+user needs `scripts/set-password.mjs`. These should land before the site takes real registrations.
+
+## ADR-0018 — Existing accounts cannot sign in until a password is set
+**Date:** 2026-09-05 · **Status:** Accepted, with an action for the owner
+
+The credential for every existing user lived with the old provider and did not come with the
+migration, so those rows now have `passwordHash = NULL` and no way in. There is no automated remedy
+that is also safe: emailing a reset link requires the password-reset flow that does not exist yet,
+and silently accepting a blank password would be a back door. The migration therefore leaves those
+accounts intact but locked, `scripts/set-password.mjs` exists to restore the first administrator,
+and everyone else either re-registers or signs in with Google on the same verified address — which
+links to their existing row rather than creating a second one.
+
+## ADR-0019 — The proxy checks for a session cookie, not a session
+**Date:** 2026-09-05 · **Status:** Accepted
+
+`src/proxy.ts` redirects to `/sign-in` when an `/admin` request arrives with no session cookie, and
+does nothing more: it does not validate the token or read a role. The proxy runs on every request,
+and a database round trip there would tax the entire site to answer a question the services already
+answer correctly. A forged or expired cookie therefore gets past the proxy and is refused by the
+admin layout's `can(actor, 'admin:access')` and by every service beneath it. The cost is that the
+redirect is a convenience rather than a control, which is worth stating plainly so nobody later
+mistakes it for the security boundary.
