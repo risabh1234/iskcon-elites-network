@@ -4,6 +4,7 @@ import { fontVariables } from './fonts';
 import Header from '@/components/layout/Header';
 import { getActor } from '@/server/auth';
 import { BRAND } from '@/lib/site';
+import { WebVitals } from '@/components/WebVitals';
 import Footer from '@/components/layout/Footer';
 
 const SITE_NAME = 'ISKCON Elites Network';
@@ -78,6 +79,8 @@ export default async function RootLayout({
           </main>
           <Footer />
         </div>
+
+        <WebVitals />
       </body>
     </html>
   );

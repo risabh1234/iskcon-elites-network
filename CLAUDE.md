@@ -195,6 +195,21 @@ breadcrumb, ⌘K palette. Rules that hold here:
 
 `npm run e2e` runs the Playwright specs proving the console refuses everyone who is not a reviewer.
 
+## Operations
+
+- `npm run ci` is the gate: design tokens → lint → tests+coverage → build. `ci.yml` adds e2e and
+  the a11y sweep. The Lighthouse `budgets` job is `if: false` until CI has a seeded database
+  (ADR-0037) — an empty directory passes every budget and proves nothing.
+- **CSP lives in `src/proxy.ts`**, not `next.config.mjs`, because it carries a per-request nonce.
+  Inline `style` attributes need `style-src-attr`, which CSP3 treats separately from `style-src`.
+- `/api/health` checks the database, so a 200 means the app can actually serve. Point the uptime
+  monitor at it and alert on 503.
+- Errors go through `server/observability/report.ts`, which scrubs connection strings, email
+  addresses and tokens from message **and** stack before writing. That is the seam where Sentry
+  goes (ADR-0036).
+- **The backup restore drill has never been run** (ADR-0038). `docs/RUNBOOK.md` has the procedure
+  and an empty drill log. Do it before this carries real member data.
+
 ## Craft rules
 
 - **Motion** comes from tokens: `--dur-*`, `--ease-*`, `--animate-*`. Nothing over 320ms. The

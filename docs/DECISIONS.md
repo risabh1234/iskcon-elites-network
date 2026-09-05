@@ -416,3 +416,61 @@ never throws: a member whose entry was approved must not see an error because th
 down. Wiring a provider is one function body. The templates themselves are real and tested,
 including that user-supplied names are escaped — a member's own name reaches the template, and an
 unescaped one is an injection into every inbox that receives it.
+
+## ADR-0035 — Content-Security-Policy moved to the proxy, with a per-request nonce
+**Date:** 2026-09-06 · **Status:** Accepted
+
+The policy was a static header in `next.config.mjs` allowing `'unsafe-inline'` and `'unsafe-eval'`
+on `script-src`, which gives away most of what CSP is for — an injected inline script is exactly
+what the header exists to stop. It is now built in `src/proxy.ts` with a fresh nonce per request,
+passed to Next through the `x-nonce` request header so it stamps its own script tags, and extended
+with `'strict-dynamic'` so the allowlist need not enumerate chunk filenames.
+
+Two things had to be right, and both were verified in a real browser: `style-src-attr
+'unsafe-inline'` is required and is *separate* from `style-src` in CSP3, because this app sets
+element styles from React props (the stagger index, `view-transition-name`) and without it every
+such element silently loses its style; and `'unsafe-eval'` is development-only, since React uses
+`eval` there to rebuild server stacks. Verified: nonces differ between requests, every injected
+script carries one, zero CSP violations across four routes, hydration completes and the mobile menu
+opens.
+
+## ADR-0036 — Observability is a seam, not a half-wired SDK
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`REBUILD_PLAN.md` Phase 8 specifies Sentry, and its acceptance criterion is that a deliberately
+thrown error appears there within 60 seconds. There is no DSN and no account, so that criterion
+cannot be met by installing the SDK either — and a half-wired reporting SDK is worse than an
+explicit gap, because it *looks* like observability while reporting nothing.
+
+`src/server/observability/report.ts` is where `Sentry.captureException` goes. What it does today is
+structured JSON to stderr, which Cloudflare Logpush collects with no further work. The scrubbing is
+the part that had to exist regardless and is tested: Prisma puts the whole connection string into a
+failed-connection message, and that message goes straight to a log aggregator. Connection strings,
+email addresses and credential-shaped tokens are redacted from both message and stack — the stack is
+scrubbed rather than dropped, because the stack is the whole value of a report.
+
+## ADR-0037 — Performance budgets are configured but not yet enforced
+**Date:** 2026-09-06 · **Status:** Accepted, with an action for the owner
+
+`lighthouserc.json` carries the plan's budgets as hard failures — LCP < 2.0s, CLS < 0.05, INP <
+200ms, script weight < 180KB, and ≥95 on all four Lighthouse categories — and they are deliberately
+absolute rather than relative to a previous run, because a budget that ratchets against yesterday
+accepts any amount of slow decline.
+
+The `budgets` job in `ci.yml` is `if: false`. Measuring an empty directory would pass every budget
+and prove nothing: the numbers only mean something against the seeded 200 members, and CI has no
+database yet. Turning it on is one line once CI has one, and it should be turned on before the
+budgets are treated as protection rather than intent.
+
+## ADR-0038 — The restore drill has not been performed, and that is recorded as a gap
+**Date:** 2026-09-06 · **Status:** Open — blocking real member data
+
+The plan is explicit that an untested backup is not a backup, and it is right. `docs/RUNBOOK.md`
+carries the dump and restore procedure and a drill log with **no entries**, because no database was
+available in the environment where this was written and running the drill against a description of
+a database proves nothing.
+
+The step most likely to fail is not the dump: it is whether `Member.searchVector` — a Postgres
+generated column that Prisma does not manage — survives the round trip along with its GIN index.
+Losing it silently disables search rather than erroring. That check is written into the drill steps
+for exactly that reason.

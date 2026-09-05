@@ -1,0 +1,107 @@
+name: CI
+
+# Separate from deploy.yml on purpose: deploy runs on a push to main and must
+# not be the first place a problem is noticed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Every gate below needs a database URL present for the build to boot, but
+  # none of them connect: src/server/env.ts validates presence, and the pages
+  # under test are rendered without data.
+  DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+  NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
+jobs:
+  verify:
+    name: Typecheck, lint, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx prisma generate
+
+      # Cheapest gates first: a design-literal or a type error should fail in
+      # seconds rather than after a build.
+      - name: Design tokens
+        run: npm run check:design
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests and coverage
+        run: npm run test:coverage
+
+      - name: Build
+        run: npx next build
+
+      - name: Dependency audit
+        # Advisory: a transitive advisory with no fix available must not block
+        # an unrelated change. It is reported, and read.
+        run: npm audit --audit-level=high || true
+
+  e2e:
+    name: End-to-end and accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npx next build
+
+      - name: Start
+        run: npx next start --port 3000 &
+
+      - name: Wait for the server
+        run: npx wait-on http://localhost:3000/sign-in --timeout 60000
+
+      - name: Access control
+        run: npm run e2e
+
+      - name: Accessibility
+        # Zero violations, on the pages a stranger can reach without a database.
+        run: node scripts/a11y-check.mjs / /about /mentorship /success-stories /sign-in /sign-up /directory /events /admin
+
+  budgets:
+    name: Performance budgets
+    runs-on: ubuntu-latest
+    # Needs a seeded database to be meaningful: measuring an empty directory
+    # would pass every budget and prove nothing. Enabled once CI has one.
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx next build
+      - run: npx next start --port 3000 &
+      - run: npx wait-on http://localhost:3000 --timeout 60000
+
+      - name: Lighthouse CI
+        run: npx --yes @lhci/cli@latest autorun
