@@ -1,22 +1,97 @@
 import { z } from 'zod';
 
-/**
- * `date` and `time` are separate columns with no timezone anywhere, so an event
- * cannot currently be rendered correctly for a reader outside the organisers'
- * zone. Phase 4 replaces both with a UTC `startsAt` plus an IANA `timezone`;
- * this schema validates what the table can actually hold today.
- */
-export const createEventSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  location: z.string().trim().min(1).max(200),
-  date: z.coerce.date(),
-  time: z.string().trim().min(1).max(40),
-  description: z.string().trim().max(10_000).optional().or(z.literal('')),
-  imageUrl: z.string().trim().url().max(2_000).optional().or(z.literal('')),
-  isHighlighted: z.boolean().optional().default(false),
-});
+export const EVENT_MODES = ['IN_PERSON', 'ONLINE', 'HYBRID'] as const;
 
-export const updateEventSchema = createEventSchema.partial();
+/**
+ * An event is an instant plus the zone it is held in.
+ *
+ * The previous schema stored a date column and a free-text time with no zone at
+ * all, which cannot be rendered correctly for any reader outside the organisers'
+ * own timezone — for an international network that is the difference between
+ * attending and not.
+ */
+/**
+ * An IANA zone identifier, e.g. "Asia/Kolkata" or "Europe/London". "UTC" is the
+ * one accepted single-word name.
+ *
+ * Two checks, and both are needed:
+ *
+ *  - Shape. `Intl` happily accepts the abbreviations "IST" and "EST", which are
+ *    ambiguous — IST is Indian, Irish and Israel Standard Time — so an
+ *    identifier must carry a region, or be UTC.
+ *  - Acceptance by `Intl`, so a well-shaped but non-existent zone is rejected.
+ *
+ * Membership in `Intl.supportedValuesOf('timeZone')` is deliberately NOT used:
+ * that list is canonical-only, and on the ICU shipped with Node it contains
+ * "Asia/Calcutta" but not "Asia/Kolkata" — the modern spelling most people type.
+ */
+const ianaTimezone = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .refine((tz) => tz === 'UTC' || /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)+$/.test(tz), {
+    message: 'Use a full IANA timezone such as Asia/Kolkata, not an abbreviation.',
+  })
+  .refine(
+    (tz) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'That is not a timezone this system recognises.' },
+  );
+
+// The cross-field checks live in `refineEvent` rather than on the object, so
+// the update schema can reuse the same shape: Zod v4 refuses `.partial()` on a
+// schema that already carries refinements.
+const eventFields = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(10_000).optional().or(z.literal('')),
+    startsAt: z.coerce.date(),
+    endsAt: z.coerce.date().optional().nullable(),
+    timezone: ianaTimezone.default('UTC'),
+    mode: z.enum(EVENT_MODES).default('IN_PERSON'),
+    venue: z.string().trim().max(200).optional().or(z.literal('')),
+    city: z.string().trim().max(120).optional().or(z.literal('')),
+    countryCode: z.string().trim().length(2).transform((v) => v.toUpperCase()).optional().or(z.literal('')),
+    onlineUrl: z.string().trim().url().max(2_000).optional().or(z.literal('')),
+    capacity: z.coerce.number().int().positive().max(100_000).optional().nullable(),
+    isHighlighted: z.boolean().optional().default(false),
+  });
+
+type EventFields = Partial<z.infer<typeof eventFields>>;
+
+const endsAfterStart = (v: EventFields) =>
+  !v.endsAt || !v.startsAt || v.endsAt >= v.startsAt;
+
+const onlineHasLink = (v: EventFields) =>
+  v.mode === undefined || v.mode === 'IN_PERSON' || Boolean(v.onlineUrl);
+
+export const createEventSchema = eventFields
+  .refine(endsAfterStart, {
+    message: 'The end time cannot be before the start.',
+    path: ['endsAt'],
+  })
+  .refine(onlineHasLink, {
+    message: 'An online or hybrid event needs a joining link.',
+    path: ['onlineUrl'],
+  });
+
+export const updateEventSchema = eventFields
+  .partial()
+  .refine(endsAfterStart, {
+    message: 'The end time cannot be before the start.',
+    path: ['endsAt'],
+  })
+  .refine(onlineHasLink, {
+    message: 'An online or hybrid event needs a joining link.',
+    path: ['onlineUrl'],
+  });
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;

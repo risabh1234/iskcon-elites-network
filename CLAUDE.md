@@ -35,6 +35,8 @@ npm run check:design     # fails on any hardcoded colour/px/ms/radius/gradient
 npm run check:a11y       # axe-core against /design-system (needs `npm run dev` running)
 npm run test             # vitest
 npm run test:coverage    # vitest with the 80% domain threshold
+npm run db:migrate       # prisma migrate deploy
+npm run db:seed          # 200 members, 30 events, 20 stories — deterministic
 node scripts/set-password.mjs <email> <password> [--superadmin]
 npm run ci               # check:design + lint + build
 npm run build:cloudflare # opennextjs-cloudflare build  (output: .open-next/, gitignored)
@@ -161,6 +163,22 @@ or invented members, carousels for primary content, centred paragraphs over 66ch
 `promote.mjs` and `promote.ts` promote **every** user to SUPERADMIN — `updateMany` with no `where`.
 These were all removed in the Phase 0 security hotfix; the note stays as a record of what to look
 for. See `docs/AUDIT.md` §6.
+
+## Data model
+
+One `Member` table with a `kind` enum — `Alumnus` and `Speaker` are gone. Key rules:
+
+- **Slugs, not ids, in URLs.** `slugify` folds diacritics, so Śrīvāsa becomes `srivasa` rather than
+  `sr-v-sa`. Slugs are never reused, including by archived rows.
+- **Soft delete everywhere.** `deletedAt` is filtered in the repository. Nothing above that layer
+  can read a deleted row, and nothing destroys a profile.
+- **Status enums, not booleans.** `MemberStatus`, `EventStatus`, `StoryStatus`.
+- **Events are a UTC instant plus an IANA zone.** Never a local time alone. Validate zones with the
+  schema's `ianaTimezone`, which rejects ambiguous abbreviations like `IST` (ADR-0022).
+- **Every admin mutation writes an `AuditLog` row** via `domain/audit/service.ts`.
+- **Search** is a weighted `tsvector` generated column plus `pg_trgm` for typo tolerance, queried
+  with raw SQL in `member/repository.ts`. Expertise is filtered through its indexed join rather than
+  being in the vector — see ADR-0021 for why.
 
 ## Auth setup
 

@@ -17,9 +17,9 @@ export default async function DirectoryPage() {
   const isAdmin = can(actor, 'member:read:unpublished');
 
   // Reviewers see the queue; everyone else sees the register.
-  const result = await listMembers(actor, { includeUnpublished: isAdmin });
+  const result = await listMembers(actor, { includeUnpublished: isAdmin, limit: 100 });
   const members: DirectoryMember[] = result.ok
-    ? result.value.map((m) => ({
+    ? result.value.members.map((m) => ({
         id: m.id,
         name: m.name,
         avatarUrl: m.avatarUrl,

@@ -226,3 +226,58 @@ answer correctly. A forged or expired cookie therefore gets past the proxy and i
 admin layout's `can(actor, 'admin:access')` and by every service beneath it. The cost is that the
 redirect is a convenience rather than a control, which is worth stating plainly so nobody later
 mistakes it for the security boundary.
+
+## ADR-0020 — One Member table replaces Alumnus and Speaker
+**Date:** 2026-09-05 · **Status:** Accepted
+
+`Alumnus` and `Speaker` held the same entity with different column names, and every read merged
+them in application code while every write branched on a category string — the cause of the
+branching in all four directory routes. They are now one `Member` with a `kind` enum, a stable
+`slug`, a `status` enum replacing the `isApproved` boolean, approval audit fields, and structured
+`Expertise`, `Organization` and `Link` relations in place of free text and a JSON blob. The
+migration copies both tables into `Member` before dropping them — the generated diff dropped them
+first, which would have discarded the entire register — and derives slugs across both tables at once
+so an alumnus and a speaker sharing a name do not collide. The cost is that this migration is
+destructive and has no down path: take a backup.
+
+## ADR-0021 — Search is Postgres, and the tsvector omits expertise
+**Date:** 2026-09-05 · **Status:** Accepted
+
+A weighted `tsvector` generated column plus a `pg_trgm` index gives ranked full-text search with
+typo tolerance, which `WHERE name ILIKE '%q%'` cannot do at any size — it cannot rank, cannot use an
+index for a leading wildcard, and returns nothing for a misspelling. At this scale a well-indexed
+Postgres query beats a search service and costs nothing.
+
+**Deviation from the plan, deliberately:** the plan specifies expertise at weight C, but a generated
+column may only reference columns of its own row and expertise lives in a join table. Maintaining
+the vector by trigger would mean two triggers — on `Member` and on `MemberExpertise` — that can
+silently drift out of step, and a stale search index is worse than a narrower one. Expertise is
+instead filtered through its own indexed join, which is more precise than full-text for a controlled
+vocabulary. `city` takes weight C in its place, because "cardiologist in Mumbai" is a real query.
+Names use the `simple` dictionary rather than `english`: stemming a proper noun helps nobody and
+mangles transliterated Sanskrit.
+
+## ADR-0022 — Timezones are validated by shape, not by membership
+**Date:** 2026-09-05 · **Status:** Accepted
+
+`Event` now stores a UTC `startsAt` plus an IANA `timezone`, replacing a date column and a free-text
+time with no zone at all — which could not be rendered correctly for any reader outside the
+organisers' own zone. Validating the zone turned out to need two checks: `Intl.DateTimeFormat`
+accepts the ambiguous abbreviations `IST` and `EST` (IST is Indian, Irish *and* Israel Standard
+Time), so an identifier must also carry a region or be exactly `UTC`. Membership in
+`Intl.supportedValuesOf('timeZone')` is **not** used, because that list is canonical-only and the
+ICU shipped with Node contains `Asia/Calcutta` but not `Asia/Kolkata` — the spelling most people
+type. Rejecting the modern name for India would have been a poor outcome for this register in
+particular.
+
+## ADR-0023 — Deletion is archival, and every admin mutation is audited
+**Date:** 2026-09-05 · **Status:** Accepted
+
+Members, events and stories carry `deletedAt` and are filtered at the repository, so nothing above
+that layer can accidentally read a deleted row and no admin mistake destroys a profile — the
+register's history is part of the register. Every administrative mutation writes an `AuditLog` row
+recording actor, action, entity and the before/after of what changed. `record()` deliberately never
+throws and never returns a failure: an action that succeeded must not be reported as failed because
+the log write did, so a failure is logged loudly to stderr and the mutation stands. The audit view
+is admin-only and drops the actor's email, because a log viewer is not a place to re-expose contact
+details.

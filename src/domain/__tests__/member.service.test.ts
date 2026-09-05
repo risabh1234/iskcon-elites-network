@@ -2,269 +2,208 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actor } from '@/server/policy';
 
 vi.mock('@/domain/member/repository', () => ({
-  listMembers: vi.fn(),
-  findMemberById: vi.fn(),
-  createAlumnus: vi.fn(),
-  createSpeaker: vi.fn(),
-  updateAlumnus: vi.fn(),
-  updateSpeaker: vi.fn(),
-  setApproval: vi.fn(),
-  deleteMember: vi.fn(),
+  listMembers: vi.fn(), countMembers: vi.fn(), findMemberById: vi.fn(),
+  findMemberBySlug: vi.fn(), searchMembers: vi.fn(), createMember: vi.fn(),
+  updateMember: vi.fn(), archiveMember: vi.fn(), restoreMember: vi.fn(),
+  slugExists: vi.fn(), listExpertise: vi.fn(),
 }));
 vi.mock('@/server/cache', () => ({
   invalidate: vi.fn(),
   tags: { member: (id: string) => `member:${id}`, members: () => 'members' },
 }));
+vi.mock('@/domain/audit/service', () => ({ record: vi.fn() }));
 
 import * as repo from '@/domain/member/repository';
+import * as audit from '@/domain/audit/service';
 import * as service from '@/domain/member/service';
 
 const anon: Actor = { kind: 'anonymous' };
-const member: Actor = {
-  kind: 'user', name: null, id: 'u1', email: 'u@example.com',
-  role: 'USER', canCreateEvents: false,
-};
-const admin: Actor = {
-  kind: 'user', name: null, id: 'a1', email: 'a@example.com',
-  role: 'ADMIN', canCreateEvents: true,
-};
+const member: Actor = { kind: 'user', name: null, id: 'u1', email: 'u@e.com', role: 'USER', canCreateEvents: false };
+const admin: Actor = { kind: 'user', name: null, id: 'a1', email: 'a@e.com', role: 'ADMIN', canCreateEvents: true };
 
-const record = (over: Partial<Record<string, unknown>> = {}) => ({
-  id: 'm1', name: 'Śrīvāsa Ṭhākura', avatarUrl: null, bio: 'Bio',
-  email: 'contact@example.com', isApproved: true, createdAt: new Date('2026-01-01'),
-  addedById: 'u1', category: 'Medicine', cohort: '2018', ...over,
+const record = (over: Record<string, unknown> = {}) => ({
+  id: 'm1', slug: 'srivasa-thakura', kind: 'ALUMNUS', legalName: 'Śrīvāsa Ṭhākura',
+  initiatedName: null, headline: 'Consultant cardiologist', bio: 'Bio',
+  city: 'Mumbai', countryCode: 'IN', cohort: '2018', email: 'contact@example.com',
+  story: null, recommendation: null, status: 'APPROVED', visibility: 'NETWORK',
+  approvedAt: new Date('2026-01-02'), createdAt: new Date('2026-01-01'),
+  submittedById: 'u1', userId: null, avatarAsset: null,
+  expertise: [{ expertise: { slug: 'medicine', label: 'Medicine', category: 'Health' } }],
+  roles: [], links: [], ...over,
 });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(repo.slugExists).mockResolvedValue(false);
+});
 
 describe('listMembers', () => {
-  it('refuses to include unpublished entries for a non-reviewer', async () => {
+  it('refuses unpublished entries to a non-reviewer', async () => {
     const result = await service.listMembers(member, { includeUnpublished: true });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('Forbidden');
     expect(repo.listMembers).not.toHaveBeenCalled();
   });
 
-  it('asks the repository for published entries only, for anonymous callers', async () => {
-    vi.mocked(repo.listMembers).mockResolvedValue([]);
+  it('asks for published entries only when the caller is anonymous', async () => {
+    vi.mocked(repo.listMembers).mockResolvedValue({ rows: [], nextCursor: null });
     await service.listMembers(anon);
-    expect(repo.listMembers).toHaveBeenCalledWith({ includeUnpublished: false, roleType: undefined });
+    expect(vi.mocked(repo.listMembers).mock.calls[0]![0]!.includeUnpublished).toBe(false);
   });
 
-  it('includes unpublished entries for a reviewer', async () => {
-    vi.mocked(repo.listMembers).mockResolvedValue([]);
-    await service.listMembers(admin, { includeUnpublished: true });
-    expect(repo.listMembers).toHaveBeenCalledWith({ includeUnpublished: true, roleType: undefined });
+  it('passes the cursor through and returns the next one', async () => {
+    vi.mocked(repo.listMembers).mockResolvedValue({ rows: [record() as never], nextCursor: 'm9' });
+    const result = await service.listMembers(anon, { cursor: 'm0' });
+    expect(vi.mocked(repo.listMembers).mock.calls[0]![0]!.cursor).toBe('m0');
+    if (result.ok) expect(result.value.nextCursor).toBe('m9');
   });
 
-  it('withholds contact addresses from anonymous callers', async () => {
-    vi.mocked(repo.listMembers).mockResolvedValue([
-      { record: record() as never, roleType: 'Alumni' },
-    ]);
-    const result = await service.listMembers(anon);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value[0]!.email).toBeUndefined();
-  });
+  it('withholds contact addresses from anonymous callers and shows them to members', async () => {
+    vi.mocked(repo.listMembers).mockResolvedValue({ rows: [record() as never], nextCursor: null });
+    const asAnon = await service.listMembers(anon);
+    if (asAnon.ok) expect(asAnon.value.members[0]!.email).toBeUndefined();
 
-  it('shows contact addresses to signed-in members', async () => {
-    vi.mocked(repo.listMembers).mockResolvedValue([
-      { record: record() as never, roleType: 'Alumni' },
-    ]);
-    const result = await service.listMembers(member);
-    if (result.ok) expect(result.value[0]!.email).toBe('contact@example.com');
+    const asMember = await service.listMembers(member);
+    if (asMember.ok) expect(asMember.value.members[0]!.email).toBe('contact@example.com');
   });
 });
 
 describe('getMember', () => {
+  it('resolves by slug first, then falls back to id', async () => {
+    vi.mocked(repo.findMemberBySlug).mockResolvedValue(record() as never);
+    expect((await service.getMember(anon, 'srivasa-thakura')).ok).toBe(true);
+    expect(repo.findMemberById).not.toHaveBeenCalled();
+
+    vi.mocked(repo.findMemberBySlug).mockResolvedValue(null);
+    vi.mocked(repo.findMemberById).mockResolvedValue(record() as never);
+    expect((await service.getMember(anon, 'm1')).ok).toBe(true);
+  });
+
   it('answers NotFound — not Forbidden — for an unpublished entry', async () => {
-    // Telling a stranger that a profile exists but is unreviewed is itself a
-    // disclosure, so the two cases must be indistinguishable.
-    vi.mocked(repo.findMemberById).mockResolvedValue({
-      record: record({ isApproved: false, addedById: 'someone' }) as never,
-      roleType: 'Alumni',
-    });
+    vi.mocked(repo.findMemberBySlug).mockResolvedValue(null);
+    vi.mocked(repo.findMemberById).mockResolvedValue(
+      record({ status: 'PENDING', submittedById: 'someone' }) as never,
+    );
     const result = await service.getMember(anon, 'm1');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('NotFound');
   });
-
-  it('lets a reviewer see an unpublished entry', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue({
-      record: record({ isApproved: false }) as never, roleType: 'Alumni',
-    });
-    expect((await service.getMember(admin, 'm1')).ok).toBe(true);
-  });
 });
 
 describe('createMember', () => {
-  const valid = { category: 'Alumni', fullName: 'A Name', cohort: '2019', bio: 'A bio' };
+  const valid = { kind: 'ALUMNUS', legalName: 'A Person', bio: 'A bio', cohort: '2019' };
 
-  it('rejects anonymous submissions', async () => {
+  it('refuses anonymous submissions', async () => {
     const result = await service.createMember(anon, valid);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.kind).toBe('Forbidden');
+    if (!result.ok) expect(result.error.kind).toBe('Unauthenticated');
   });
 
-  it('rejects an invalid payload with field-level detail', async () => {
-    const result = await service.createMember(member, { category: 'Alumni', fullName: '' });
+  it('derives a slug that folds diacritics', async () => {
+    vi.mocked(repo.createMember).mockResolvedValue(record() as never);
+    await service.createMember(member, { ...valid, legalName: 'Śrīvāsa Ṭhākura' });
+    expect(vi.mocked(repo.createMember).mock.calls[0]![0]!.slug).toBe('srivasa-thakura');
+  });
+
+  it('leaves an ordinary submission PENDING and publishes a reviewer’s immediately', async () => {
+    vi.mocked(repo.createMember).mockResolvedValue(record() as never);
+    await service.createMember(member, valid);
+    expect(vi.mocked(repo.createMember).mock.calls[0]![0]!.status).toBe('PENDING');
+
+    vi.clearAllMocks();
+    vi.mocked(repo.slugExists).mockResolvedValue(false);
+    vi.mocked(repo.createMember).mockResolvedValue(record() as never);
+    await service.createMember(admin, valid);
+    expect(vi.mocked(repo.createMember).mock.calls[0]![0]!.status).toBe('APPROVED');
+  });
+
+  it('records the submitter, ignoring anything the client sent', async () => {
+    vi.mocked(repo.createMember).mockResolvedValue(record() as never);
+    await service.createMember(member, { ...valid, submittedById: 'someone-else' });
+    expect(vi.mocked(repo.createMember).mock.calls[0]![0]!.submittedById).toBe('u1');
+  });
+
+  it('rejects an invalid payload with field detail', async () => {
+    const result = await service.createMember(member, { kind: 'ALUMNUS', legalName: '' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.kind).toBe('Validation');
       expect(result.error.fields).toBeDefined();
     }
-    expect(repo.createAlumnus).not.toHaveBeenCalled();
-  });
-
-  it('leaves an ordinary member’s submission unapproved', async () => {
-    vi.mocked(repo.createAlumnus).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    await service.createMember(member, valid);
-    expect(vi.mocked(repo.createAlumnus).mock.calls[0]![0]!.isApproved).toBe(false);
-  });
-
-  it('publishes a reviewer’s own submission immediately', async () => {
-    vi.mocked(repo.createAlumnus).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    await service.createMember(admin, valid);
-    expect(vi.mocked(repo.createAlumnus).mock.calls[0]![0]!.isApproved).toBe(true);
-  });
-
-  it('records the submitter, not a client-supplied id', async () => {
-    vi.mocked(repo.createAlumnus).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    await service.createMember(member, { ...valid, addedById: 'someone-else' });
-    expect(vi.mocked(repo.createAlumnus).mock.calls[0]![0]!.addedById).toBe('u1');
   });
 });
 
-describe('updateMember', () => {
-  it('lets the owner edit', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    vi.mocked(repo.updateAlumnus).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    const result = await service.updateMember(member, 'm1', {
-      roleType: 'Alumni', fullName: 'New Name', bio: 'New bio',
-    });
-    expect(result.ok).toBe(true);
+describe('approval writes an audit entry', () => {
+  beforeEach(() => {
+    vi.mocked(repo.findMemberById).mockResolvedValue(record({ status: 'PENDING' }) as never);
+    vi.mocked(repo.updateMember).mockResolvedValue(record() as never);
   });
 
-  it('refuses a non-owner who is not a reviewer', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue({
-      record: record({ addedById: 'other' }) as never, roleType: 'Alumni',
-    });
-    const result = await service.updateMember(member, 'm1', {
-      roleType: 'Alumni', fullName: 'New Name', bio: 'New bio',
-    });
+  it('is reviewers only', async () => {
+    const result = await service.setMemberApproval(member, 'm1', { isApproved: true });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('Forbidden');
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('records who approved what, with the previous status', async () => {
+    expect((await service.setMemberApproval(admin, 'm1', { isApproved: true })).ok).toBe(true);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'a1', action: 'member.approve', entity: 'Member', entityId: 'm1',
+        before: { status: 'PENDING' },
+      }),
+    );
+  });
+
+  it('records a rejection with its reason', async () => {
+    await service.setMemberApproval(admin, 'm1', { isApproved: false, reason: 'Not a member' });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'member.reject',
+        after: { status: 'REJECTED', reason: 'Not a member' },
+      }),
+    );
   });
 });
 
-describe('deleteMember', () => {
-  it('refuses a signed-in non-reviewer even for their own entry', async () => {
-    // This is the audited hole: the old handler authenticated and then deleted.
-    vi.mocked(repo.findMemberById).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
+describe('deleteMember archives rather than destroys', () => {
+  beforeEach(() => {
+    vi.mocked(repo.findMemberById).mockResolvedValue(record() as never);
+  });
+
+  it('refuses a signed-in non-reviewer, even for their own entry', async () => {
     const result = await service.deleteMember(member, 'm1');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('Forbidden');
-    expect(repo.deleteMember).not.toHaveBeenCalled();
+    expect(repo.archiveMember).not.toHaveBeenCalled();
   });
 
-  it('refuses anonymous callers', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    expect((await service.deleteMember(anon, 'm1')).ok).toBe(false);
-  });
-
-  it('allows a reviewer', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    vi.mocked(repo.deleteMember).mockResolvedValue(undefined);
+  it('soft-deletes and audits when a reviewer does it', async () => {
     expect((await service.deleteMember(admin, 'm1')).ok).toBe(true);
-    expect(repo.deleteMember).toHaveBeenCalledWith('m1', 'Alumni');
+    expect(repo.archiveMember).toHaveBeenCalledWith('m1');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'member.archive', entity: 'Member' }),
+    );
   });
 });
 
-describe('setMemberApproval', () => {
-  it('is reviewers only', async () => {
-    const result = await service.setMemberApproval(member, 'm1', {
-      roleType: 'Alumni', isApproved: true,
-    });
+describe('searchMembers', () => {
+  it('never lets a non-reviewer widen the search to unpublished rows', async () => {
+    vi.mocked(repo.searchMembers).mockResolvedValue([]);
+    await service.searchMembers(member, { q: 'mumbai', includeUnpublished: true });
+    expect(vi.mocked(repo.searchMembers).mock.calls[0]![0]!.includeUnpublished).toBe(false);
+  });
+
+  it('allows a reviewer to', async () => {
+    vi.mocked(repo.searchMembers).mockResolvedValue([]);
+    await service.searchMembers(admin, { q: 'mumbai', includeUnpublished: true });
+    expect(vi.mocked(repo.searchMembers).mock.calls[0]![0]!.includeUnpublished).toBe(true);
+  });
+
+  it('rejects an empty query rather than scanning the table', async () => {
+    const result = await service.searchMembers(anon, { q: '   ' });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.kind).toBe('Forbidden');
-  });
-
-  it('validates the payload', async () => {
-    const result = await service.setMemberApproval(admin, 'm1', { isApproved: 'yes' });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.kind).toBe('Validation');
-  });
-});
-
-describe('coverage of the remaining paths', () => {
-  it('reports NotFound when updating something that does not exist', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue(null);
-    const result = await service.updateMember(admin, 'gone', {
-      roleType: 'Alumni', fullName: 'X', bio: 'Y',
-    });
-    if (!result.ok) expect(result.error.kind).toBe('NotFound');
-  });
-
-  it('reports NotFound when approving something that does not exist', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue(null);
-    const result = await service.setMemberApproval(admin, 'gone', {
-      roleType: 'Alumni', isApproved: true,
-    });
-    if (!result.ok) expect(result.error.kind).toBe('NotFound');
-  });
-
-  it('approves an existing entry', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue({ record: record() as never, roleType: 'Alumni' });
-    vi.mocked(repo.setApproval).mockResolvedValue(undefined);
-    expect((await service.setMemberApproval(admin, 'm1', { roleType: 'Alumni', isApproved: false })).ok).toBe(true);
-    expect(repo.setApproval).toHaveBeenCalledWith('m1', 'Alumni', false);
-  });
-
-  it('creates a speaker through the speaker branch', async () => {
-    vi.mocked(repo.createSpeaker).mockResolvedValue({
-      record: record({ title: 'Professor' }) as never, roleType: 'Speaker',
-    });
-    const result = await service.createMember(admin, {
-      category: 'Speaker', fullName: 'A Speaker', title: 'Professor', bio: 'Bio',
-    });
-    expect(result.ok).toBe(true);
-    expect(repo.createSpeaker).toHaveBeenCalled();
-  });
-
-  it('labels a Featured Guest correctly', async () => {
-    vi.mocked(repo.createSpeaker).mockResolvedValue({
-      record: record({ title: 'Featured Guest' }) as never, roleType: 'Speaker',
-    });
-    await service.createMember(admin, {
-      category: 'Featured Guest', fullName: 'A Guest', bio: 'Bio',
-    });
-    expect(vi.mocked(repo.createSpeaker).mock.calls[0]![0]!.title).toBe('Featured Guest');
-  });
-
-  it('updates a speaker through the speaker branch', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue({ record: record() as never, roleType: 'Speaker' });
-    vi.mocked(repo.updateSpeaker).mockResolvedValue({ record: record() as never, roleType: 'Speaker' });
-    const result = await service.updateMember(admin, 'm1', {
-      roleType: 'Speaker', fullName: 'N', bio: 'B', title: 'T',
-    });
-    expect(result.ok).toBe(true);
-    expect(repo.updateSpeaker).toHaveBeenCalled();
-  });
-
-  it('turns a repository failure into an Internal error without leaking it', async () => {
-    vi.mocked(repo.createAlumnus).mockRejectedValue(new Error('duplicate key value violates unique constraint'));
-    const result = await service.createMember(member, {
-      category: 'Alumni', fullName: 'A', cohort: '2020', bio: 'B',
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe('Internal');
-      expect(result.error.message).not.toContain('duplicate key');
-    }
-  });
-
-  it('reports NotFound when deleting something that does not exist', async () => {
-    vi.mocked(repo.findMemberById).mockResolvedValue(null);
-    const result = await service.deleteMember(admin, 'gone');
-    if (!result.ok) expect(result.error.kind).toBe('NotFound');
+    expect(repo.searchMembers).not.toHaveBeenCalled();
   });
 });

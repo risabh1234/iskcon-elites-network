@@ -106,6 +106,14 @@ const boundaries = [
     files: ["src/server/auth.ts", "src/server/auth/*.ts", "src/domain/auth/*.ts"],
     rules: { "no-restricted-imports": "off" },
   },
+  // 7. Tests are exempt. A test of the password module has to import the
+  //    password module; the boundaries exist to shape production call paths,
+  //    and a test is not one.
+  {
+    name: "boundaries/tests",
+    files: ["src/**/*.test.ts", "src/**/__tests__/**"],
+    rules: { "no-restricted-imports": "off" },
+  },
 ];
 
 const eslintConfig = defineConfig([

@@ -1,14 +1,17 @@
 generator client {
- provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
- provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [pg_trgm]
 }
 
-// ------------------------------------------------------
-// 1. Identity & sessions (first-party; no external auth provider)
-// ------------------------------------------------------
+// ══════════════════════════════════════════════════════════════════════════
+// Identity & sessions (first-party; no external auth provider)
+// ══════════════════════════════════════════════════════════════════════════
+
 model User {
   id       String  @id @default(uuid())
   // Stored lower-cased so that a@Example.com and a@example.com are one person.
@@ -31,13 +34,25 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  // Audit relations
-  alumni       Alumnus[]
-  speakers     Speaker[]
-  testimonials Testimonial[]
-  events       Event[]
+  /// The directory entry this account owns, if any.
+  member Member?
+
+  submittedMembers Member[]  @relation("MemberSubmittedBy")
+  approvedMembers  Member[]  @relation("MemberApprovedBy")
+  createdEvents    Event[]
+  registrations    EventRegistration[]
+  authoredStories  SuccessStory[]
+  uploadedAssets   MediaAsset[]
+  auditEntries     AuditLog[]
+  sentInvitations  Invitation[]
 
   @@index([role])
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
 }
 
 /// A social identity linked to a User. One row per provider per user.
@@ -53,10 +68,7 @@ model Account {
   @@index([userId])
 }
 
-/// An active sign-in.
-///
-/// The cookie carries a random token; only its SHA-256 hash is stored, so a
-/// database leak does not hand out live sessions.
+/// An active sign-in. Only the SHA-256 of the cookie token is stored.
 model Session {
   id         String   @id @default(uuid())
   tokenHash  String   @unique
@@ -71,72 +83,432 @@ model Session {
   @@index([expiresAt])
 }
 
-enum Role {
- USER
- ADMIN
- SUPERADMIN
+// ══════════════════════════════════════════════════════════════════════════
+// The register
+// ══════════════════════════════════════════════════════════════════════════
+
+/// One person in the directory.
+///
+/// Replaces the `Alumnus` and `Speaker` tables, which were the same entity
+/// split in two and re-merged in application code on every read — the cause of
+/// the category branching in every route that touched the directory.
+model Member {
+  id String @id @default(uuid())
+
+  /// Stable, human-readable URL segment. Never reused, never derived at render
+  /// time — a profile's address must survive a change of name.
+  slug String @unique
+
+  kind MemberKind @default(ALUMNUS)
+
+  /// The name they are known by publicly.
+  legalName String
+  /// Initiated (spiritual) name, where they use one. Often the name the network
+  /// knows them by, so it is a first-class field rather than a note in the bio.
+  initiatedName String?
+
+  /// One line: role and organisation. Not a biography.
+  headline String?
+  bio      String  @db.Text
+
+  city        String?
+  /// ISO 3166-1 alpha-2.
+  countryCode String? @db.Char(2)
+  /// IANA zone, e.g. "Asia/Kolkata".
+  timezone    String?
+
+  /// Alumni only: the cohort they belong to.
+  cohort String?
+
+  email      String?
+  story      String? @db.Text
+  recommendation String? @db.Text
+
+  visibility MemberVisibility @default(NETWORK)
+  status     MemberStatus     @default(PENDING)
+
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("MemberApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  submittedById String
+  submittedBy   User   @relation("MemberSubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
+
+  /// The account this profile belongs to, when the member has one.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  avatarAssetId String?     @unique
+  avatarAsset   MediaAsset? @relation("MemberAvatar", fields: [avatarAssetId], references: [id], onDelete: SetNull)
+
+  expertise     MemberExpertise[]
+  roles         MemberRole[]
+  links         Link[]
+  mentorship    MentorshipProfile?
+  stories       SuccessStory[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Soft delete. Members are never hard-deleted: an archived profile is still
+  /// part of the register's history.
+  deletedAt DateTime?
+
+  /// Weighted tsvector, maintained by Postgres as a generated column. Prisma
+  /// cannot express generated columns, so it is declared unsupported here and
+  /// created in the 20260905020000_member_search migration. Queried through raw
+  /// SQL in member/repository.ts; never written by the application.
+  searchVector Unsupported("tsvector")?
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([kind, status])
+  @@index([countryCode])
+  @@index([city])
+  @@index([submittedById])
+  @@index([approvedById])
+  @@index([deletedAt])
 }
 
-// ------------------------------------------------------
-// 2. Core Domain Models
-// ------------------------------------------------------
-model Alumnus {
- id String @id @default(uuid())
- name String
- category String 
- cohort String
- bio String @db.Text
- avatarUrl String?
- videoUrl String?
- socialLinks Json? 
- email     String?  // optional contact email
- story     String?  @db.Text
- recommendation String? @db.Text
- addedById String
- addedBy User @relation(fields: [addedById], references: [id])
- isApproved Boolean @default(false)
- createdAt DateTime @default(now())
+enum MemberKind {
+  ALUMNUS
+  SPEAKER
+  GUEST
 }
 
-model Speaker {
- id String @id @default(uuid())
- name String
- title String
- bio String @db.Text
- avatarUrl String?
- email     String?  // optional contact email
- addedById String
- addedBy User @relation(fields: [addedById], references: [id])
- isApproved Boolean @default(false)
- createdAt DateTime @default(now())
+enum MemberStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  ARCHIVED
 }
 
- model Testimonial {
- id String @id @default(uuid())
- authorName String
- role String
- content String @db.Text
- videoUrl String?
-
- addedById String
- addedBy User @relation(fields: [addedById], references: [id])
- createdAt DateTime @default(now())
+enum MemberVisibility {
+  /// Anyone, signed in or not.
+  PUBLIC
+  /// Signed-in members only.
+  NETWORK
+  /// Reviewers only.
+  PRIVATE
 }
 
-// ------------------------------------------------------
-// 3. Events
-// ------------------------------------------------------
- model Event {
- id String @id @default(uuid())
- title String
- location String
- date DateTime
- time String
- description String? @db.Text
- imageUrl String?
- isHighlighted Boolean @default(false)
- addedById String
- addedBy User @relation(fields: [addedById], references: [id])
- isApproved Boolean @default(false)
- createdAt DateTime @default(now())
+/// Controlled vocabulary. Free-text tags become unsearchable noise inside six
+/// months, and cannot be used to build a filter that anyone trusts.
+model Expertise {
+  id       String @id @default(uuid())
+  slug     String @unique
+  label    String
+  /// Broad grouping, e.g. "Medicine", used to organise the filter list.
+  category String?
+
+  members MemberExpertise[]
+
+  @@index([category])
+}
+
+model MemberExpertise {
+  memberId    String
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  expertiseId String
+  expertise   Expertise @relation(fields: [expertiseId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, expertiseId])
+  @@index([expertiseId])
+}
+
+model Organization {
+  id      String  @id @default(uuid())
+  slug    String  @unique
+  name    String
+  website String?
+
+  roles MemberRole[]
+}
+
+/// Where a member works, with a title and a date range.
+model MemberRole {
+  id             String       @id @default(uuid())
+  memberId       String
+  member         Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  title     String
+  startedOn DateTime?
+  endedOn   DateTime?
+  isCurrent Boolean   @default(true)
+
+  @@index([memberId])
+  @@index([organizationId])
+  @@index([memberId, isCurrent])
+}
+
+/// External links, typed. A JSON blob cannot be validated, indexed, or rendered
+/// with the right icon without a lookup table somewhere else.
+model Link {
+  id       String   @id @default(uuid())
+  memberId String
+  member   Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  kind     LinkKind
+  url      String
+  label    String?
+
+  @@unique([memberId, kind, url])
+  @@index([memberId])
+}
+
+enum LinkKind {
+  WEBSITE
+  LINKEDIN
+  X
+  GITHUB
+  SCHOLAR
+  ORCID
+  YOUTUBE
+  INSTAGRAM
+  OTHER
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Events
+// ══════════════════════════════════════════════════════════════════════════
+
+model Event {
+  id   String @id @default(uuid())
+  slug String @unique
+
+  title       String
+  description String? @db.Text
+
+  /// The instant, in UTC. The previous schema stored a date column plus a free
+  /// text time and no zone at all, which cannot be rendered correctly for any
+  /// reader outside the organisers' own timezone.
+  startsAt DateTime
+  endsAt   DateTime?
+  /// IANA zone the event is held in, shown alongside the viewer's own.
+  timezone String   @default("UTC")
+
+  mode     EventMode   @default(IN_PERSON)
+  venue    String?
+  city     String?
+  countryCode String?  @db.Char(2)
+  onlineUrl String?
+
+  capacity Int?
+
+  status        EventStatus @default(PUBLISHED)
+  isHighlighted Boolean     @default(false)
+
+  coverAssetId String?     @unique
+  coverAsset   MediaAsset? @relation("EventCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  registrations EventRegistration[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([status, startsAt])
+  @@index([startsAt])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+enum EventMode {
+  IN_PERSON
+  ONLINE
+  HYBRID
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+model EventRegistration {
+  id      String @id @default(uuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status       RegistrationStatus @default(REGISTERED)
+  registeredAt DateTime           @default(now())
+
+  /// One registration per person per event, enforced by the database rather
+  /// than by a check that races under concurrent requests.
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@index([eventId, status])
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  WAITLISTED
+  CANCELLED
+  ATTENDED
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Mentorship
+// ══════════════════════════════════════════════════════════════════════════
+
+model MentorshipProfile {
+  id       String @id @default(uuid())
+  memberId String @unique
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  isAccepting Boolean @default(true)
+  /// How many active mentees they will take.
+  capacity    Int     @default(3)
+  focusAreas  String? @db.Text
+  blurb       String? @db.Text
+
+  requests MentorshipRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isAccepting])
+}
+
+model MentorshipRequest {
+  id        String            @id @default(uuid())
+  profileId String
+  profile   MentorshipProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  requesterId String
+  message     String  @db.Text
+
+  status     MentorshipStatus @default(REQUESTED)
+  decidedAt  DateTime?
+  decisionNote String?        @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId, status])
+  @@index([requesterId])
+}
+
+enum MentorshipStatus {
+  REQUESTED
+  ACCEPTED
+  DECLINED
+  SCHEDULED
+  COMPLETED
+  WITHDRAWN
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Editorial
+// ══════════════════════════════════════════════════════════════════════════
+
+model SuccessStory {
+  id      String  @id @default(uuid())
+  slug    String  @unique
+  title   String
+  excerpt String? @db.Text
+  body    String  @db.Text
+
+  status      StoryStatus @default(DRAFT)
+  publishedAt DateTime?
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  /// The member the story is about, when it is about one.
+  memberId String?
+  member   Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  coverAssetId String?     @unique
+  coverAsset   MediaAsset? @relation("StoryCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([authorId])
+  @@index([memberId])
+  @@index([deletedAt])
+}
+
+enum StoryStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Media & audit
+// ══════════════════════════════════════════════════════════════════════════
+
+model MediaAsset {
+  id     String @id @default(uuid())
+  key    String @unique
+  bucket String
+
+  mime  String
+  bytes Int
+  width  Int?
+  height Int?
+  /// Placeholder rendered while the real image loads, so there is no flash of
+  /// empty box and no layout shift.
+  blurhash String?
+
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  memberAvatar Member?       @relation("MemberAvatar")
+  eventCover   Event?        @relation("EventCover")
+  storyCover   SuccessStory? @relation("StoryCover")
+
+  @@index([uploadedById])
+}
+
+/// Every administrative mutation writes one of these. An admin console without
+/// an audit trail is one nobody can be held to.
+model AuditLog {
+  id String @id @default(uuid())
+
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  action   String
+  entity   String
+  entityId String?
+
+  before Json?
+  after  Json?
+
+  ip String?
+  at DateTime @default(now())
+
+  @@index([at(sort: Desc)])
+  @@index([actorId, at(sort: Desc)])
+  @@index([entity, entityId])
+}
+
+/// Controlled onboarding.
+model Invitation {
+  id        String  @id @default(uuid())
+  email     String
+  tokenHash String  @unique
+  role      Role    @default(USER)
+
+  invitedById String
+  invitedBy   User   @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
 }

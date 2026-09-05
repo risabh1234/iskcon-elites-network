@@ -2,22 +2,16 @@ import { can, type Actor } from '@/server/policy';
 import { forbidden, notFound, unauthenticated, validation, internal } from '@/server/errors';
 import { err, ok, type Result } from '@/server/result';
 import { invalidate, tags } from '@/server/cache';
+import { uniqueSlug } from '@/lib/slug';
+import { record as audit } from '@/domain/audit/service';
 import * as repo from './repository';
-import { toMemberDto, type MemberDto } from './dto';
+import { toMemberDto, toSearchDto, type MemberDto, type MemberSearchDto } from './dto';
 import {
   approveMemberSchema,
   createMemberSchema,
+  searchSchema,
   updateMemberSchema,
-  type MemberRoleType,
 } from './schema';
-
-/**
- * Business rules for the directory.
- *
- * Every method authorises before it acts, and every write invalidates its own
- * cache tags. Route handlers do neither — they parse, resolve the actor, and
- * map the Result. That is the whole contract.
- */
 
 function fieldErrors(error: { issues: { path: PropertyKey[]; message: string }[] }) {
   const fields: Record<string, string[]> = {};
@@ -28,45 +22,89 @@ function fieldErrors(error: { issues: { path: PropertyKey[]; message: string }[]
   return fields;
 }
 
+const empty = (v?: string | null) => (v && v.length > 0 ? v : null);
+
+export type MemberPage = {
+  members: MemberDto[];
+  nextCursor: string | null;
+};
+
 export async function listMembers(
   actor: Actor,
-  options: { roleType?: MemberRoleType; includeUnpublished?: boolean } = {},
-): Promise<Result<MemberDto[]>> {
-  // Unapproved entries are visible only to those allowed to review them. This
-  // is the check whose absence served pending profiles to the public.
+  options: {
+    kind?: 'ALUMNUS' | 'SPEAKER' | 'GUEST';
+    expertiseSlug?: string;
+    countryCode?: string;
+    cursor?: string;
+    limit?: number;
+    sort?: 'name' | 'recent';
+    includeUnpublished?: boolean;
+  } = {},
+): Promise<Result<MemberPage>> {
   const wantsUnpublished = options.includeUnpublished === true;
   if (wantsUnpublished && !can(actor, 'member:read:unpublished')) {
     return err(forbidden('Only reviewers can see unapproved entries.'));
   }
 
-  const rows = await repo.listMembers({
+  const { rows, nextCursor } = await repo.listMembers({
     includeUnpublished: wantsUnpublished,
-    roleType: options.roleType,
+    kind: options.kind,
+    expertiseSlug: options.expertiseSlug,
+    countryCode: options.countryCode,
+    cursor: options.cursor,
+    limit: options.limit,
+    sort: options.sort,
   });
 
-  return ok(rows.map(({ record, roleType }) => toMemberDto(record, roleType, actor)));
+  return ok({ members: rows.map((row) => toMemberDto(row, actor)), nextCursor });
 }
 
-export async function getMember(actor: Actor, id: string): Promise<Result<MemberDto>> {
-  const found = await repo.findMemberById(id);
-  if (!found) return err(notFound('That profile could not be found.'));
+export async function searchMembers(
+  actor: Actor,
+  input: unknown,
+): Promise<Result<MemberSearchDto[]>> {
+  const parsed = searchSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(validation('That search could not be run.', { fields: fieldErrors(parsed.error) }));
+  }
 
-  const { record, roleType } = found;
+  const includeUnpublished =
+    parsed.data.includeUnpublished === true && can(actor, 'member:read:unpublished');
 
-  if (!can(actor, 'member:read', { isPublished: record.isApproved, ownerId: record.addedById })) {
-    // Deliberately NotFound rather than Forbidden: telling a stranger that a
-    // profile exists but is unpublished is itself a disclosure.
+  const rows = await repo.searchMembers({
+    query: parsed.data.q,
+    includeUnpublished,
+    limit: parsed.data.limit,
+  });
+
+  return ok(rows.map(toSearchDto));
+}
+
+export async function getMember(actor: Actor, idOrSlug: string): Promise<Result<MemberDto>> {
+  const record =
+    (await repo.findMemberBySlug(idOrSlug)) ?? (await repo.findMemberById(idOrSlug));
+
+  if (!record) return err(notFound('That profile could not be found.'));
+
+  if (
+    !can(actor, 'member:read', {
+      isPublished: record.status === 'APPROVED',
+      ownerId: record.submittedById,
+    })
+  ) {
+    // NotFound rather than Forbidden: telling a stranger that a profile exists
+    // but is unpublished is itself a disclosure.
     return err(notFound('That profile could not be found.'));
   }
 
-  return ok(toMemberDto(record, roleType, actor));
+  return ok(toMemberDto(record, actor));
 }
 
 export async function createMember(actor: Actor, input: unknown): Promise<Result<MemberDto>> {
+  if (actor.kind !== 'user') return err(unauthenticated());
   if (!can(actor, 'member:create')) {
     return err(forbidden('You need to be signed in to submit an entry.'));
   }
-  if (actor.kind !== 'user') return err(forbidden());
 
   const parsed = createMemberSchema.safeParse(input);
   if (!parsed.success) {
@@ -74,38 +112,43 @@ export async function createMember(actor: Actor, input: unknown): Promise<Result
   }
 
   const data = parsed.data;
-  // A reviewer's own submission is published immediately; everyone else's waits.
-  const isApproved = can(actor, 'member:approve');
-
-  const empty = (v?: string) => (v && v.length > 0 ? v : null);
+  const isReviewer = can(actor, 'member:approve');
 
   try {
-    const created =
-      data.category === 'Alumni'
-        ? await repo.createAlumnus({
-            name: data.fullName,
-            category: data.category,
-            cohort: data.cohort,
-            bio: data.bio,
-            story: empty(data.story),
-            recommendation: empty(data.recommendation),
-            email: empty(data.email),
-            avatarUrl: empty(data.profileImage),
-            addedById: actor.id,
-            isApproved,
-          })
-        : await repo.createSpeaker({
-            name: data.fullName,
-            title: data.category === 'Featured Guest' ? 'Featured Guest' : (data.title ?? ''),
-            bio: data.bio,
-            email: empty(data.email),
-            avatarUrl: empty(data.profileImage),
-            addedById: actor.id,
-            isApproved,
-          });
+    const slug = await uniqueSlug(data.legalName, repo.slugExists);
 
-    invalidate(tags.members(), tags.member(created.record.id));
-    return ok(toMemberDto(created.record, created.roleType, actor));
+    const created = await repo.createMember({
+      slug,
+      kind: data.kind,
+      legalName: data.legalName,
+      initiatedName: empty(data.initiatedName),
+      headline: empty(data.headline),
+      bio: data.bio,
+      city: empty(data.city),
+      countryCode: empty(data.countryCode),
+      cohort: empty(data.cohort),
+      email: empty(data.email),
+      story: empty(data.story),
+      recommendation: empty(data.recommendation),
+      // A reviewer's own submission publishes immediately; everyone else waits.
+      status: isReviewer ? 'APPROVED' : 'PENDING',
+      approvedAt: isReviewer ? new Date() : null,
+      approvedById: isReviewer ? actor.id : null,
+      submittedById: actor.id,
+    });
+
+    if (isReviewer) {
+      await audit({
+        actorId: actor.id,
+        action: 'member.create',
+        entity: 'Member',
+        entityId: created.id,
+        after: { slug: created.slug, status: created.status },
+      });
+    }
+
+    invalidate(tags.members(), tags.member(created.id));
+    return ok(toMemberDto(created, actor));
   } catch (cause) {
     return err(internal('The entry could not be saved.', { cause }));
   }
@@ -116,15 +159,12 @@ export async function updateMember(
   id: string,
   input: unknown,
 ): Promise<Result<MemberDto>> {
-  // Ownership cannot be evaluated without reading the record, but an anonymous
-  // caller can never own anything — answer before touching the database, so an
-  // unauthenticated flood costs a comparison rather than a query.
   if (actor.kind !== 'user') return err(unauthenticated());
 
   const existing = await repo.findMemberById(id);
   if (!existing) return err(notFound('That profile could not be found.'));
 
-  if (!can(actor, 'member:update', { ownerId: existing.record.addedById })) {
+  if (!can(actor, 'member:update', { ownerId: existing.submittedById })) {
     return err(forbidden('You can only edit entries you submitted.'));
   }
 
@@ -134,31 +174,35 @@ export async function updateMember(
   }
 
   const data = parsed.data;
-  const empty = (v?: string) => (v && v.length > 0 ? v : null);
 
   try {
-    const updated =
-      data.roleType === 'Alumni'
-        ? await repo.updateAlumnus(id, {
-            name: data.fullName,
-            category: data.category ?? '',
-            cohort: data.cohort ?? '',
-            bio: data.bio,
-            story: empty(data.story),
-            recommendation: empty(data.recommendation),
-            email: empty(data.email),
-            avatarUrl: empty(data.profileImage),
-          })
-        : await repo.updateSpeaker(id, {
-            name: data.fullName,
-            title: data.title ?? '',
-            bio: data.bio,
-            email: empty(data.email),
-            avatarUrl: empty(data.profileImage),
-          });
+    const updated = await repo.updateMember(id, {
+      ...(data.legalName !== undefined ? { legalName: data.legalName } : {}),
+      ...(data.initiatedName !== undefined ? { initiatedName: empty(data.initiatedName) } : {}),
+      ...(data.headline !== undefined ? { headline: empty(data.headline) } : {}),
+      ...(data.bio !== undefined ? { bio: data.bio } : {}),
+      ...(data.city !== undefined ? { city: empty(data.city) } : {}),
+      ...(data.countryCode !== undefined ? { countryCode: empty(data.countryCode) } : {}),
+      ...(data.cohort !== undefined ? { cohort: empty(data.cohort) } : {}),
+      ...(data.email !== undefined ? { email: empty(data.email) } : {}),
+      ...(data.story !== undefined ? { story: empty(data.story) } : {}),
+      ...(data.recommendation !== undefined ? { recommendation: empty(data.recommendation) } : {}),
+      ...(data.kind !== undefined ? { kind: data.kind } : {}),
+    });
+
+    if (can(actor, 'member:approve')) {
+      await audit({
+        actorId: actor.id,
+        action: 'member.update',
+        entity: 'Member',
+        entityId: id,
+        before: { legalName: existing.legalName, headline: existing.headline },
+        after: { legalName: updated.legalName, headline: updated.headline },
+      });
+    }
 
     invalidate(tags.members(), tags.member(id));
-    return ok(toMemberDto(updated.record, updated.roleType, actor));
+    return ok(toMemberDto(updated, actor));
   } catch (cause) {
     return err(internal('The entry could not be saved.', { cause }));
   }
@@ -169,22 +213,37 @@ export async function setMemberApproval(
   id: string,
   input: unknown,
 ): Promise<Result<void>> {
+  if (actor.kind !== 'user') return err(unauthenticated());
   if (!can(actor, 'member:approve')) {
     return err(forbidden('Only reviewers can publish or unpublish an entry.'));
   }
 
   const parsed = approveMemberSchema.safeParse(input);
   if (!parsed.success) {
-    return err(validation('A role type and approval state are required.', {
-      fields: fieldErrors(parsed.error),
-    }));
+    return err(validation('An approval state is required.', { fields: fieldErrors(parsed.error) }));
   }
 
   const existing = await repo.findMemberById(id);
   if (!existing) return err(notFound('That profile could not be found.'));
 
+  const nextStatus = parsed.data.isApproved ? 'APPROVED' : 'REJECTED';
+
   try {
-    await repo.setApproval(id, parsed.data.roleType, parsed.data.isApproved);
+    await repo.updateMember(id, {
+      status: nextStatus,
+      approvedAt: parsed.data.isApproved ? new Date() : null,
+      approvedBy: parsed.data.isApproved ? { connect: { id: actor.id } } : { disconnect: true },
+    });
+
+    await audit({
+      actorId: actor.id,
+      action: parsed.data.isApproved ? 'member.approve' : 'member.reject',
+      entity: 'Member',
+      entityId: id,
+      before: { status: existing.status },
+      after: { status: nextStatus, reason: parsed.data.reason ?? null },
+    });
+
     invalidate(tags.members(), tags.member(id));
     return ok(undefined);
   } catch (cause) {
@@ -198,18 +257,38 @@ export async function deleteMember(actor: Actor, id: string): Promise<Result<voi
   const existing = await repo.findMemberById(id);
   if (!existing) return err(notFound('That profile could not be found.'));
 
-  // Deletion is reviewers only — never the submitter. The route this replaces
-  // checked only that the caller was signed in, so any member could destroy any
-  // profile in the register (docs/AUDIT.md §6).
-  if (!can(actor, 'member:delete', { ownerId: existing.record.addedById })) {
+  if (!can(actor, 'member:delete', { ownerId: existing.submittedById })) {
     return err(forbidden('Only reviewers can remove an entry.'));
   }
 
   try {
-    await repo.deleteMember(id, existing.roleType);
+    // Archived, not destroyed: the register's history is part of the register.
+    await repo.archiveMember(id);
+
+    await audit({
+      actorId: actor.id,
+      action: 'member.archive',
+      entity: 'Member',
+      entityId: id,
+      before: { status: existing.status, slug: existing.slug },
+      after: { status: 'ARCHIVED' },
+    });
+
     invalidate(tags.members(), tags.member(id));
     return ok(undefined);
   } catch (cause) {
     return err(internal('The entry could not be removed.', { cause }));
   }
+}
+
+export async function listExpertise(): Promise<Result<{ slug: string; label: string; category: string | null; count: number }[]>> {
+  const rows = await repo.listExpertise();
+  return ok(
+    rows.map((r) => ({
+      slug: r.slug,
+      label: r.label,
+      category: r.category,
+      count: r._count.members,
+    })),
+  );
 }
