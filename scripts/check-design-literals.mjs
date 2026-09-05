@@ -60,29 +60,32 @@ const RULES = [
     id: 'hex-colour',
     // #abc / #aabbcc / #aabbccdd
     re: /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g,
-    hint: 'use a --color-* token',
+    hint: 'use a colour token',
   },
   {
     id: 'raw-px',
     // 12px, 1.5px — but not inside a var() fallback or a token definition
     re: /(?<![\w-])\d+(?:\.\d+)?px\b/g,
-    hint: 'use a --space-*, --radius-* or --text-* token',
+    hint: 'use a spacing, radius or text token',
   },
   {
     id: 'raw-duration',
     re: /(?<![\w-])\d+(?:\.\d+)?ms\b/g,
-    hint: 'use a --dur-* token',
+    hint: 'use a duration token',
   },
   {
     id: 'rgb-colour',
     re: /\b(?:rgba?|hsla?)\s*\(/g,
-    hint: 'use a --color-* token',
+    hint: 'use a colour token',
   },
   {
     id: 'oversized-radius',
-    // rounded-[var(--radius-*)] is correct usage; a literal arbitrary value is not.
+    // An arbitrary radius referencing a var() token is correct usage;
+    // an arbitrary radius holding a literal length is not.
     re: /\brounded-(?:2xl|3xl|\[(?!var\()[^\]]*\])/g,
-    hint: 'radii are 2/4/6px or fully round — use rounded-[var(--radius-*)] or rounded-full',
+    // NB: never write a literal utility class in a hint. Tailwind scans this
+    // file and will happily compile the example into real (invalid) CSS.
+    hint: 'radii are 2, 4 or 6 — use a radius token, or rounded-full for pills',
   },
   {
     id: 'gradient-fill',

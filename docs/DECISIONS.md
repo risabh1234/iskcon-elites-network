@@ -95,9 +95,9 @@ layer is where the answer gets encoded.
 **Date:** 2026-09-05 · **Status:** Accepted
 
 The accent is the plan's desaturated saffron-copper `#A2571B` rather than the existing brand saffron
-`#D98A29`, because the existing one measures roughly 3.1:1 on the cream paper and so cannot legally
-carry body-size text, which would have forced an accent-plus-a-second-accent system on day one;
-`#A2571B` measures about 6.4:1 and does the whole job alone. The display face is self-hosted
+`#D98A29`, because the existing one measures roughly 2.8:1 against white on the cream paper and so
+cannot legally carry body-size text, which would have forced an accent-plus-a-second-accent system
+on day one; `#A2571B` measures 5.1:1 on paper and carries white at 5.4:1, doing the whole job alone. The display face is self-hosted
 Newsreader Variable — free, genuinely good at display sizes, and swappable for a licensed face later
 by changing one token — and the product ships **light only**, because two modes maintained at 80%
 read worse than one held to standard. The costs: existing collateral in brand saffron will look
@@ -125,3 +125,26 @@ several weeks, and a gate that is always red is a gate everyone learns to skip �
 is green today and blocks every *new* violation actually holds the line. The cost is that the rule is
 not yet true of the whole tree; each allowlist entry names the phase that deletes it, and removing
 the entry is part of finishing that phase.
+
+## ADR-0012 — The component gallery lives at /design-system, not /_design
+**Date:** 2026-09-05 · **Status:** Accepted
+
+`REBUILD_PLAN.md` Phase 2 asks for a dev-only route at `/_design`, but in the App Router a directory
+whose name begins with an underscore is a *private folder* and is excluded from routing entirely —
+the page would never have resolved to a URL. The gallery is therefore at `/design-system`, excluded
+from the proxy matcher (it needs no session, and routing it through Clerk only buys a handshake
+redirect), and it calls `notFound()` when `NODE_ENV` is production. The cost is that the production
+block now lives in the page rather than in the proxy, which is the more reliable of the two places
+anyway since it cannot be defeated by editing a matcher.
+
+## ADR-0013 — Contrast failures found by axe are fixed in the tokens, not worked around
+**Date:** 2026-09-05 · **Status:** Accepted
+
+The first axe run against the gallery failed `--color-ink-subtle` (#8A857A measured 3.49:1 on paper,
+against the 4.5:1 small-text threshold), so the token was darkened to #6F6A5E at 5.1:1 rather than
+the usage being restricted to large text — meta and caption text is exactly what that token is for.
+`--color-ink-faint` cannot pass 4.5:1 and remain faint, so it is now documented as disabled-text and
+decorative-icon only, and every placeholder moved to `--color-ink-subtle`: disabled controls are
+exempt from the contrast requirement, placeholders are not. The same run found two genuine bugs in
+the existing footer — social links with no accessible name, and white on the old brand saffron at
+2.75:1 — which were fixed in place because they affect every page today.

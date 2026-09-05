@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "ci": "npm run check:design && npm run lint && npm run build",
     "build:cloudflare": "npx @opennextjs/cloudflare build",
-    "check:design": "node scripts/check-design-literals.mjs"
+    "check:design": "node scripts/check-design-literals.mjs",
+    "check:a11y": "node scripts/a11y-check.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
@@ -19,17 +20,22 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@supabase/supabase-js": "^2.108.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "framer-motion": "^12.41.0",
     "lucide-react": "^1.21.0",
     "next": "16.2.9",
     "next-themes": "^0.4.6",
     "pg": "^8.22.0",
     "pg-cloudflare": "^1.4.0",
+    "radix-ui": "^1.6.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tailwind-merge": "^3.6.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/newsreader": "^5.3.0",
     "@fontsource-variable/noto-serif-devanagari": "^5.3.0",
@@ -41,6 +47,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "playwright": "^1.63.0",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "typescript": "^5",

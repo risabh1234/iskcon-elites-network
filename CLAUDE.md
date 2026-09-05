@@ -32,6 +32,7 @@ npm run dev              # next dev
 npm run build            # prisma generate && next build
 npm run lint             # eslint .
 npm run check:design     # fails on any hardcoded colour/px/ms/radius/gradient
+npm run check:a11y       # axe-core against /design-system (needs `npm run dev` running)
 npm run ci               # check:design + lint + build
 npm run build:cloudflare # opennextjs-cloudflare build  (output: .open-next/, gitignored)
 npx prisma generate      # after any schema change
@@ -71,6 +72,24 @@ rewrites it. **Never add to that list** — removing an entry is part of finishi
 line may opt out with a `design-literal-allow` comment where a JS literal is genuinely unavoidable,
 such as the `themeColor` in `viewport`.
 
+## Components
+
+`src/components/primitives/` is the vocabulary — Button, Field, Input, Textarea, Checkbox, Radio,
+Switch, Select, Combobox, Dialog, Sheet, Popover, Tooltip, Toast, Tabs, Badge, Avatar, Skeleton,
+Table, Pagination, Command. Behaviour and accessibility come from Radix; the styling is ours, via
+CVA and tokens. **Do not install a component kit** — shadcn/ui is fine to read and copy from, but as
+a dependency it imports someone else's design opinions and you will spend longer fighting them.
+Combobox and Command have no Radix equivalent and are built here on the WAI-ARIA combobox pattern.
+
+`src/components/patterns/` composes those into Container, Section, PageHeader, Prose, EmptyState,
+ErrorState, FilterBar, MemberCard, EventCard, StoryCard. Pages assemble patterns; if a page is
+inventing layout, the missing thing is a pattern.
+
+`/design-system` renders every component in every state. It is the review surface — check a change
+there before checking it in a page, and run `npm run check:a11y` against it. It is dev-only:
+`notFound()` in production, and excluded from the proxy matcher. It is **not** `/_design`, because a
+leading underscore marks a private folder that the App Router excludes from routing entirely.
+
 ## Design direction — "Quiet Institution"
 
 Authority is demonstrated by what you leave out. Warm near-white paper, never pure white; warm
@@ -86,7 +105,14 @@ or invented members, carousels for primary content, centred paragraphs over 66ch
 ## Working here
 
 - Read `node_modules/next/dist/docs/` before writing Next.js code. This version has breaking changes
-  from what you remember — see `AGENTS.md`.
+  from what you remember — see `AGENTS.md`. Two that have already bitten: `error.tsx` receives
+  `unstable_retry`, not `reset`; and the `middleware` convention is renamed to `proxy` (`src/proxy.ts`,
+  exporting `proxy`).
+- Tailwind v4 scans the whole project for class candidates, **including comments and Markdown**. A
+  class name written as an example in a code comment compiles into real CSS; `scripts/` and `docs/`
+  are excluded in `globals.css` for exactly this reason.
+- Contrast is checked, not eyeballed. `--color-ink-faint` is for disabled text and decorative icons
+  only; placeholders and captions use `--color-ink-subtle`.
 - Every list needs a designed empty state; every async surface needs a skeleton that matches the
   final layout exactly; every error state names what failed and offers a retry. Premium products
   are judged on their unhappy paths.

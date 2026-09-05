@@ -28,16 +28,19 @@
 
   --color-ink:          #12110F;  /* headings, primary text */
   --color-ink-muted:    #5B574F;  /* body copy */
-  --color-ink-subtle:   #8A857A;  /* meta, captions, timestamps */
-  --color-ink-faint:    #B8B3A8;  /* placeholders, disabled */
+  --color-ink-subtle:   #6F6A5E;  /* meta, captions, timestamps — 5.1:1 on paper */
+  /* Disabled text and decorative icons ONLY. It does not meet 4.5:1 and cannot
+     without ceasing to be faint — disabled controls are exempt from the contrast
+     requirement, placeholders are not. Placeholders use --color-ink-subtle.    */
+  --color-ink-faint:    #B8B3A8;
 
   --color-line:         #E4E0D8;  /* hairline — roughly 10% ink */
   --color-line-strong:  #CFC9BE;  /* hairline under emphasis */
 
   /* Accent — desaturated saffron-copper (ADR-0009). At most one accented
      control per viewport; under 5% of visible surface. Never a gradient fill,
-     never a large field of it. #A2571B on --color-paper is 6.4:1, so it is
-     safe for body-size text as well as large.                               */
+     never a large field of it. #A2571B measures 5.1:1 on --color-paper, so it
+     is safe for body-size text as well as large; white on it is 5.4:1.       */
   --color-accent:       #A2571B;
   --color-accent-hover: #8A4915;
   --color-accent-quiet: #F5EBE0;  /* tint — backgrounds only, never text */
@@ -92,12 +95,16 @@
 
   /* ── Space ───────────────────────────────────────────────────────────────
      4px base for components, 8px rhythm for layout. Section padding is fluid
-     so vertical rhythm holds without a breakpoint for every page type.       */
+     so vertical rhythm holds without a breakpoint for every page type.
 
-  --space-1: 0.25rem;   --space-2: 0.5rem;    --space-3: 0.75rem;
-  --space-4: 1rem;      --space-5: 1.5rem;    --space-6: 2rem;
-  --space-7: 2.5rem;    --space-8: 3rem;      --space-9: 4rem;
-  --space-10: 5rem;     --space-11: 6rem;     --space-12: 8rem;
+     Named --spacing-* rather than --space-* deliberately: that is Tailwind v4's
+     spacing namespace, so `p-5` and `gap-3` resolve to THIS scale rather than
+     the framework default. One name, usable from a class or from CSS.        */
+
+  --spacing-1: 0.25rem;   --spacing-2: 0.5rem;    --spacing-3: 0.75rem;
+  --spacing-4: 1rem;      --spacing-5: 1.5rem;    --spacing-6: 2rem;
+  --spacing-7: 2.5rem;    --spacing-8: 3rem;      --spacing-9: 4rem;
+  --spacing-10: 5rem;     --spacing-11: 6rem;     --spacing-12: 8rem;
 
   --section-y:       clamp(4rem, 3rem + 5vw, 8rem);
   --section-y-large: clamp(6rem, 4rem + 8vw, 11rem);
@@ -112,6 +119,15 @@
   --radius-pill: 999px;
 
   --border-hairline: 1px;
+
+  /* Switch geometry. A toggle needs its own numbers — deriving thumb travel
+     from the spacing scale produces either a cramped or a floating thumb.
+     travel = width - 2*pad - thumb.                                          */
+  --switch-w:      2.25rem;
+  --switch-h:      1.25rem;
+  --switch-thumb:  0.875rem;
+  --switch-pad:    0.1875rem;
+  --switch-travel: 1rem;
 
   /* Focus ring geometry. Tokenised so the ring is identical on every control
      and can be widened globally if it ever tests poorly.                     */
@@ -138,6 +154,20 @@
   --dur-slow:    320ms;
 
   --z-header: 50;  --z-overlay: 100;  --z-toast: 200;
+
+  /* Named animations. Tailwind generates `animate-<name>` from this namespace,
+     so overlays and panels animate from tokens rather than from a plugin whose
+     durations we do not control. Keyframes live in base.css.                  */
+  --animate-fade-in:         fade-in    var(--dur-fast)    var(--ease-standard);
+  --animate-fade-out:        fade-out   var(--dur-instant) var(--ease-exit);
+  --animate-scale-in:        scale-in   var(--dur-normal)  var(--ease-emphasised);
+  --animate-scale-out:       scale-out  var(--dur-instant) var(--ease-exit);
+  --animate-slide-in-right:  slide-in-right  var(--dur-normal)  var(--ease-emphasised);
+  --animate-slide-out-right: slide-out-right var(--dur-fast)    var(--ease-exit);
+  --animate-slide-in-left:   slide-in-left   var(--dur-normal)  var(--ease-emphasised);
+  --animate-slide-out-left:  slide-out-left  var(--dur-fast)    var(--ease-exit);
+  --animate-slide-in-up:     slide-in-up     var(--dur-normal)  var(--ease-emphasised);
+  --animate-slide-out-down:  slide-out-down  var(--dur-fast)    var(--ease-exit);
 
   /* ── Breakpoints ─────────────────────────────────────────────────────────
      A real scale, restored (ADR-0010). The previous globals.css pinned all

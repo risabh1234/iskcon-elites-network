@@ -5,3 +5,9 @@
 @import "../styles/tokens.css";
 @import "../styles/base.css";
 @import "../styles/legacy.css";
+
+/* Tailwind v4 scans the whole project for class candidates. Scripts and docs
+   are prose *about* classes, not uses of them — a class name quoted in a code
+   comment compiled into real (and invalid) CSS until these were excluded. */
+@source not "../../scripts";
+@source not "../../docs";
