@@ -1,0 +1,31 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEGACY — scheduled for deletion.
+   ───────────────────────────────────────────────────────────────────────────
+   Rules kept alive only so that pages not yet rebuilt keep working. Nothing new
+   goes in this file, and it is exempt from the design-literal CI check because
+   its contents are on their way out, not on their way in.
+
+   The marquee below drives the "featured members" strip on the home page. It
+   violates the motion budget (infinite, 30s, decorative rather than explanatory)
+   and the direction's stance on carousels for primary content. It goes when
+   Phase 5.4 rebuilds src/app/page.tsx into its four movements.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+}

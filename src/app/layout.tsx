@@ -1,26 +1,56 @@
 import { ClerkProvider } from '@clerk/nextjs';
-import type { Metadata } from 'next';
-import { Inter, Playfair_Display } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { fontVariables } from './fonts';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import CustomCursor from '@/components/CustomCursor';
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-});
-
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  variable: '--font-playfair',
-  display: 'swap',
-});
+const SITE_NAME = 'ISKCON Elites Network';
+const SITE_DESCRIPTION =
+  'A register of accomplished people who share a tradition — alumni, speakers and mentors of the ISKCON Elites Network.';
+const LOCALE = 'en';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://iskcon-elites-network.workers.dev';
 
 export const metadata: Metadata = {
-  title: 'Iskcon Elites Network',
-  description: 'Where Spiritual Wisdom Meets Professional Excellence.',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    // Child segments set their own title; this frames it. `default` is required
+    // whenever a template is set.
+    template: `%s · ${SITE_NAME}`,
+    default: SITE_NAME,
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: '/',
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  // Browser chrome is set from JS, not CSS, so this is the one place a colour
+  // cannot come from a token. Must mirror --color-paper.
+  themeColor: '#FAF9F7', // design-literal-allow
+  colorScheme: 'light',
 };
 
 export default function RootLayout({
@@ -29,33 +59,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider
-      afterSignOutUrl="/"
-      appearance={{
-        elements: {
-          card: "bg-white border border-gray-100 shadow-xl rounded-2xl",
-          headerTitle: "text-[#0C1A30] font-bold tracking-tight text-2xl font-serif",
-          headerSubtitle: "text-gray-500 text-sm",
-          formFieldLabel: "text-gray-700 font-medium text-xs uppercase tracking-wider",
-          formFieldInput: "bg-white border border-gray-200 text-[#0C1A30] rounded-xl focus:border-[#D98A29] focus:ring-1 focus:ring-[#D98A29] transition-all",
-          formButtonPrimary: "bg-[#D98A29] hover:bg-[#c47a22] text-white font-semibold text-sm rounded-xl shadow-md transition-all transform active:scale-[0.98]",
-        }
-      }}
-    >
-      <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-        <body className="antialiased bg-[var(--color-brand-cream)] text-[var(--color-brand-navy)] min-h-screen flex flex-col font-sans selection:bg-[#D98A29]/20 selection:text-[#0C1A30]">
-          <div className="relative min-h-screen flex flex-col overflow-x-hidden">
-            <CustomCursor />
+    <ClerkProvider afterSignOutUrl="/">
+      <html lang={LOCALE} className={fontVariables}>
+        <body>
+          {/* First tab stop on every page: skip the nav, reach the content. */}
+          <a href="#main" className="skip-link">
+            Skip to content
+          </a>
 
-            {/* Core Page Content */}
-            <div className="relative z-10 flex-1 flex flex-col">
-              <Header />
-              <main className="flex-1 flex flex-col">
-                {children}
-              </main>
-              <Footer />
-            </div>
-
+          <div className="flex min-h-screen flex-col">
+            <Header />
+            <main id="main" tabIndex={-1} className="flex flex-1 flex-col">
+              {children}
+            </main>
+            <Footer />
           </div>
         </body>
       </html>

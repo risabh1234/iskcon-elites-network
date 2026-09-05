@@ -1,53 +1,7 @@
-@import "tailwindcss";
+/* The entry point. It imports the design system and nothing else — every rule
+   lives in src/styles/. If you are about to add a declaration here, it belongs
+   in tokens.css (a value), base.css (an element default), or a component. */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-
-  --color-brand-navy: #0C1A30;
-  --color-brand-cream: #FDFBF7;
-  --color-brand-saffron: #D98A29;
-  --color-brand-gold: #C5A059;
-
-  --font-sans: var(--font-inter);
-  --font-serif: var(--font-playfair);
-
-  /* Strictly 2 Views: Mobile (< 1024px) and Desktop (>= 1024px) */
-  --breakpoint-sm: 1024px;
-  --breakpoint-md: 1024px;
-  --breakpoint-lg: 1024px;
-  --breakpoint-xl: 1024px;
-  --breakpoint-2xl: 1024px;
-}
-
-:root {
-  /* Enforcing a premium cream theme */
-  --background: #FDFBF7;
-  --foreground: #1a1a1a;
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), sans-serif;
-  margin: 0;
-  padding: 0;
-}
-
-@keyframes marquee {
-  0% {
-    transform: translateX(0);
-  }
-
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-.animate-marquee {
-  animation: marquee 30s linear infinite;
-}
-
-.animate-marquee:hover {
-  animation-play-state: paused;
-}
+@import "../styles/tokens.css";
+@import "../styles/base.css";
+@import "../styles/legacy.css";

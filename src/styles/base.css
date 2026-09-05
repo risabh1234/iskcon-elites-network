@@ -1,0 +1,260 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Base layer — reset, typographic defaults, focus.
+   Everything here reads from tokens.css. No literal values.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  /* ── Reset ──────────────────────────────────────────────────────────── */
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  * {
+    margin: 0;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -moz-tab-size: 4;
+    tab-size: 4;
+    scroll-behavior: smooth;
+    /* Anchored headings clear the fixed header instead of hiding under it. */
+    scroll-padding-block-start: var(--space-11);
+    color-scheme: light;
+  }
+
+  body {
+    min-block-size: 100vh;
+    background-color: var(--color-paper);
+    color: var(--color-ink-muted);
+    font-family: var(--font-text);
+    font-size: var(--text-base);
+    line-height: var(--leading-body);
+    letter-spacing: var(--tracking-normal);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* cv11: single-storey a in Inter. ss01: contextual alternates. Both make
+       Inter read less like the framework default it has become. */
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  /* Media defaults to block so it never sits on a text baseline. */
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    display: block;
+    max-inline-size: 100%;
+    block-size: auto;
+  }
+
+  /* Form controls do not inherit type by default. Make them. */
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
+
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  /* Long unbroken strings (URLs, IDs) must not force a horizontal scrollbar. */
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  li,
+  dd,
+  dt,
+  figcaption {
+    overflow-wrap: break-word;
+  }
+
+  /* ── Typography ─────────────────────────────────────────────────────── */
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    color: var(--color-ink);
+    font-weight: 400;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
+    /* Headings are short; balance beats ragging. */
+    text-wrap: balance;
+  }
+
+  h1 {
+    font-size: var(--text-4xl);
+    line-height: var(--leading-display);
+    letter-spacing: var(--tracking-display);
+  }
+
+  h2 { font-size: var(--text-3xl); letter-spacing: var(--tracking-display); }
+  h3 { font-size: var(--text-2xl); }
+  h4 { font-size: var(--text-xl); }
+  h5 { font-size: var(--text-lg); }
+  h6 { font-size: var(--text-base); }
+
+  p {
+    /* Avoids a single-word last line without balancing the whole paragraph. */
+    text-wrap: pretty;
+  }
+
+  a {
+    color: inherit;
+    text-decoration-color: var(--color-line-strong);
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: from-font;
+    transition: color var(--dur-instant) var(--ease-standard),
+                text-decoration-color var(--dur-instant) var(--ease-standard);
+  }
+
+  a:hover {
+    color: var(--color-ink);
+    text-decoration-color: currentColor;
+  }
+
+  strong,
+  b {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  small {
+    font-size: var(--text-xs);
+    color: var(--color-ink-subtle);
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  /* Numbers must not shimmy as they update or misalign down a column. */
+  table,
+  time,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Sanskrit set in Devanagari gets the face that can actually shape it. */
+  :lang(hi),
+  :lang(sa),
+  [data-script="deva"] {
+    font-family: var(--font-deva);
+  }
+
+  ul,
+  ol {
+    padding-inline-start: var(--space-5);
+  }
+
+  ::marker {
+    color: var(--color-ink-faint);
+  }
+
+  hr {
+    border: none;
+    border-block-start: var(--border-hairline) solid var(--color-line);
+  }
+
+  ::placeholder {
+    color: var(--color-ink-faint);
+    opacity: 1;
+  }
+
+  ::selection {
+    background-color: var(--color-selection);
+    color: var(--color-ink);
+  }
+
+  /* ── Focus ──────────────────────────────────────────────────────────────
+     Visible on every interactive element, one appearance everywhere. Never
+     remove this without replacing it — keyboard users navigate by it.      */
+
+  :focus-visible {
+    outline: var(--ring-width) solid var(--color-focus);
+    outline-offset: var(--ring-offset);
+    border-radius: var(--radius-xs);
+  }
+
+  /* Suppress the ring for pointer users only, never for keyboard. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ── Scrollbars ─────────────────────────────────────────────────────── */
+
+  @supports (scrollbar-color: auto) {
+    html {
+      scrollbar-color: var(--color-line-strong) transparent;
+      scrollbar-width: thin;
+    }
+  }
+
+  /* ── Reduced motion ─────────────────────────────────────────────────────
+     Not "less" motion — none. A vestibular trigger is not a design nuance. */
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important; /* design-literal-allow: idiom — cancels animation while still firing animationend */
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important; /* design-literal-allow */
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* `sr-only` is Tailwind's; redefining it here would only be a second copy to
+     keep in sync. Only what Tailwind does not provide lives below. */
+
+  /* Skip link: off-screen until focused, then anchored top-left. */
+  .skip-link {
+    position: absolute;
+    inset-block-start: var(--space-2);
+    inset-inline-start: var(--space-2);
+    z-index: var(--z-toast);
+    padding: var(--space-2) var(--space-4);
+    background-color: var(--color-paper-raised);
+    color: var(--color-ink);
+    border: var(--border-hairline) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-overlay);
+    font-size: var(--text-sm);
+    transform: translateY(-200%);
+    transition: transform var(--dur-fast) var(--ease-emphasised);
+  }
+
+  .skip-link:focus-visible {
+    transform: translateY(0);
+  }
+}

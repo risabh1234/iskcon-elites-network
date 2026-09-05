@@ -1,8 +1,11 @@
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+// Validates the environment as a side effect of this import, so a missing or
+// malformed variable fails at boot rather than as an opaque error under load.
+import { env } from '@/server/env';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 
 const prismaClientSingleton = () => {
@@ -17,4 +20,4 @@ const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
 
 export default prisma;
 
-if (process.env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma;
+if (env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma;

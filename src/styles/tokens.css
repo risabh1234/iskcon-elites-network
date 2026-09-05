@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ISKCON Elites Network — design tokens
+   ───────────────────────────────────────────────────────────────────────────
+   The single source of design truth. Every colour, size, radius, duration and
+   easing curve in this product is defined here and nowhere else.
+
+   If a value you need is missing, add a token. Do not inline the exception —
+   that is how the previous codebase arrived at 266 hardcoded hex colours.
+
+   Direction: "Quiet Institution". Authority is demonstrated by what is left
+   out. See CLAUDE.md and REBUILD_PLAN.md Part II.
+
+   Light only, by decision (docs/DECISIONS.md ADR-0009). Two modes done at 80%
+   read worse than one done properly. The structure below supports adding dark
+   later — redefine the colour block, touch nothing else.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Colour ──────────────────────────────────────────────────────────────
+     Warm neutrals throughout. Never pure white, never pure black — both read
+     as "browser default" and flatten everything placed on them.             */
+
+  --color-paper:        #FAF9F7;  /* the page */
+  --color-paper-raised: #FFFFFF;  /* cards, sheets — the only pure white */
+  --color-paper-sunken: #F2F0EC;  /* wells, table stripes, inert areas */
+
+  --color-ink:          #12110F;  /* headings, primary text */
+  --color-ink-muted:    #5B574F;  /* body copy */
+  --color-ink-subtle:   #8A857A;  /* meta, captions, timestamps */
+  --color-ink-faint:    #B8B3A8;  /* placeholders, disabled */
+
+  --color-line:         #E4E0D8;  /* hairline — roughly 10% ink */
+  --color-line-strong:  #CFC9BE;  /* hairline under emphasis */
+
+  /* Accent — desaturated saffron-copper (ADR-0009). At most one accented
+     control per viewport; under 5% of visible surface. Never a gradient fill,
+     never a large field of it. #A2571B on --color-paper is 6.4:1, so it is
+     safe for body-size text as well as large.                               */
+  --color-accent:       #A2571B;
+  --color-accent-hover: #8A4915;
+  --color-accent-quiet: #F5EBE0;  /* tint — backgrounds only, never text */
+  --color-accent-ink:   #FFFFFF;  /* text placed on --color-accent */
+
+  --color-success:      #2F6B4F;
+  --color-warning:      #8A6410;
+  --color-danger:       #9B2C22;
+  --color-danger-quiet: #F7EBE9;
+
+  /* Focus ring. Deliberately its own token: the ring must stay legible on
+     paper, on accent, and on danger, so it is not simply "the accent".       */
+  --color-focus:        #1F5C8F;
+
+  --color-selection:    #F0E2D2;
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+     Two families, plus a Devanagari companion which does not count as a third.
+     The var() chains resolve to the faces declared in src/app/fonts.ts; the
+     second entry in each is the Latin Extended face, which the browser reaches
+     for per-glyph when it hits IAST transliteration.                         */
+
+  --font-display: var(--font-newsreader), var(--font-newsreader-ext), "Iowan Old Style", Georgia, serif;
+  --font-text:    var(--font-inter), var(--font-inter-ext), -apple-system, "Segoe UI", sans-serif;
+  --font-deva:    var(--font-deva-face), var(--font-newsreader), serif;
+  --font-mono:    ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Fluid scale. Display sizes carry negative tracking; UI sizes do not. */
+  --text-2xs:   0.6875rem;   /* 11 */
+  --text-xs:    0.75rem;     /* 12 */
+  --text-sm:    0.8125rem;   /* 13 — UI default */
+  --text-base:  0.9375rem;   /* 15 — body default */
+  --text-lg:    1.0625rem;   /* 17 */
+  --text-xl:    1.3125rem;   /* 21 */
+  --text-2xl:   clamp(1.5rem,   1.2rem + 1.2vw, 1.875rem);
+  --text-3xl:   clamp(1.875rem, 1.4rem + 2.0vw, 2.625rem);
+  --text-4xl:   clamp(2.375rem, 1.6rem + 3.2vw, 3.75rem);
+  --text-5xl:   clamp(3rem,     1.8rem + 5.0vw, 5.25rem);
+
+  --tracking-display: -0.022em;
+  --tracking-tight:   -0.012em;
+  --tracking-normal:  0em;
+  --tracking-wide:    0.08em;   /* eyebrows and small caps only */
+
+  --leading-display: 1.04;
+  --leading-tight:   1.18;
+  --leading-body:    1.6;
+  --leading-prose:   1.72;
+
+  --measure-prose: 66ch;
+  --measure-lede:  52ch;
+
+  /* ── Space ───────────────────────────────────────────────────────────────
+     4px base for components, 8px rhythm for layout. Section padding is fluid
+     so vertical rhythm holds without a breakpoint for every page type.       */
+
+  --space-1: 0.25rem;   --space-2: 0.5rem;    --space-3: 0.75rem;
+  --space-4: 1rem;      --space-5: 1.5rem;    --space-6: 2rem;
+  --space-7: 2.5rem;    --space-8: 3rem;      --space-9: 4rem;
+  --space-10: 5rem;     --space-11: 6rem;     --space-12: 8rem;
+
+  --section-y:       clamp(4rem, 3rem + 5vw, 8rem);
+  --section-y-large: clamp(6rem, 4rem + 8vw, 11rem);
+
+  /* ── Structure ───────────────────────────────────────────────────────── */
+
+  --container-max: 77.5rem;   /* 1240 */
+  --container-pad: clamp(1.25rem, 0.75rem + 2.5vw, 2.5rem);
+  --grid-gutter:   clamp(1rem, 0.5rem + 1.5vw, 2rem);
+
+  --radius-xs: 2px;  --radius-sm: 4px;  --radius-md: 6px;
+  --radius-pill: 999px;
+
+  --border-hairline: 1px;
+
+  /* Focus ring geometry. Tokenised so the ring is identical on every control
+     and can be widened globally if it ever tests poorly.                     */
+  --ring-width:  2px;
+  --ring-offset: 2px;
+
+  /* Barely there, and never coloured. If the shadow is visible as a shadow
+     rather than as depth, it is too big.                                     */
+  --shadow-raised:  0 1px 2px rgb(18 17 15 / 0.04),
+                    0 1px 1px rgb(18 17 15 / 0.03);
+  --shadow-overlay: 0 8px 24px rgb(18 17 15 / 0.08),
+                    0 2px 6px  rgb(18 17 15 / 0.04);
+
+  /* ── Motion ──────────────────────────────────────────────────────────────
+     Nothing over 320ms. Motion explains a change of state or it is deleted.  */
+
+  --ease-standard:   cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasised: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-exit:       cubic-bezier(0.3, 0, 1, 1);
+
+  --dur-instant: 120ms;
+  --dur-fast:    180ms;
+  --dur-normal:  240ms;
+  --dur-slow:    320ms;
+
+  --z-header: 50;  --z-overlay: 100;  --z-toast: 200;
+
+  /* ── Breakpoints ─────────────────────────────────────────────────────────
+     A real scale, restored (ADR-0010). The previous globals.css pinned all
+     five of these to 1024px, which gave the site exactly two layouts and made
+     every md:/lg:/xl: utility fire at the same width.                        */
+
+  --breakpoint-sm:  40rem;    /* 640 */
+  --breakpoint-md:  48rem;    /* 768 */
+  --breakpoint-lg:  64rem;    /* 1024 */
+  --breakpoint-xl:  80rem;    /* 1280 */
+  --breakpoint-2xl: 96rem;    /* 1536 */
+}

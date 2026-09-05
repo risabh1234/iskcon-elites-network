@@ -16,7 +16,9 @@ gets three sentences there.
 | | |
 |---|---|
 | Framework | Next.js **16.2.9**, App Router, React 19.2.4 |
-| Styling | Tailwind CSS **v4** — CSS-first, **no `tailwind.config`**; theme lives in `@theme` blocks |
+| Styling | Tailwind CSS **v4** — CSS-first, **no `tailwind.config`**; tokens live in `src/styles/tokens.css` |
+| Fonts | Self-hosted variable WOFF2 in `src/app/fonts/`, wired in `src/app/fonts.ts`. Newsreader (display), Inter (text), Noto Serif Devanagari. Latin and Latin-Ext load as separate faces so IAST (ā ṛ ṣ ḥ) renders |
+| Env | `src/server/env.ts` validates with zod at module load; `src/lib/prisma.ts` imports it so boot fails loudly |
 | Auth | Clerk (`@clerk/nextjs` v7) |
 | Database | Postgres on Supabase, via Prisma 7 with the `@prisma/adapter-pg` driver adapter |
 | Storage | Supabase Storage today (bucket `profiles`); Cloudflare R2 configured but unused — see `docs/AUDIT.md` §8 |
@@ -29,7 +31,8 @@ gets three sentences there.
 npm run dev              # next dev
 npm run build            # prisma generate && next build
 npm run lint             # eslint .
-npm run ci               # lint + build
+npm run check:design     # fails on any hardcoded colour/px/ms/radius/gradient
+npm run ci               # check:design + lint + build
 npm run build:cloudflare # opennextjs-cloudflare build  (output: .open-next/, gitignored)
 npx prisma generate      # after any schema change
 npx prisma migrate dev   # named migrations — prisma/migrations/ does not exist yet, Phase 4 creates it
@@ -60,7 +63,13 @@ result. Under 30 lines.
 Every one of them comes from a token in `src/styles/tokens.css`. No hex literals, no raw `px`, no
 raw `ms` anywhere else — including inside `className` strings, inline `style` objects, and
 `framer-motion` props. If the value you need does not exist as a token, add the token; do not
-inline the exception. CI greps for violations from Phase 1 onward.
+inline the exception. `npm run check:design` enforces this and runs first in CI.
+
+The check exempts `src/styles/tokens.css` (it *is* the source of truth) and the nineteen
+pre-rebuild files listed in `scripts/check-design-literals.mjs`, each tagged with the phase that
+rewrites it. **Never add to that list** — removing an entry is part of finishing a phase. A single
+line may opt out with a `design-literal-allow` comment where a JS literal is genuinely unavoidable,
+such as the `themeColor` in `viewport`.
 
 ## Design direction — "Quiet Institution"
 

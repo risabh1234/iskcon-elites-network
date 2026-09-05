@@ -90,3 +90,38 @@ address should be readable by anonymous visitors is a product decision that pred
 not a bug, so the hotfix leaves it alone rather than silently removing a feature. **Open question
 for the owner:** should member email be public, signed-in-only, or opt-in per member? Phase 3's DTO
 layer is where the answer gets encoded.
+
+## ADR-0009 — Accent, display face and colour-mode chosen for Phase 1
+**Date:** 2026-09-05 · **Status:** Accepted
+
+The accent is the plan's desaturated saffron-copper `#A2571B` rather than the existing brand saffron
+`#D98A29`, because the existing one measures roughly 3.1:1 on the cream paper and so cannot legally
+carry body-size text, which would have forced an accent-plus-a-second-accent system on day one;
+`#A2571B` measures about 6.4:1 and does the whole job alone. The display face is self-hosted
+Newsreader Variable — free, genuinely good at display sizes, and swappable for a licensed face later
+by changing one token — and the product ships **light only**, because two modes maintained at 80%
+read worse than one held to standard. The costs: existing collateral in brand saffron will look
+slightly warmer than the site, and anyone expecting a dark toggle will not get one.
+
+## ADR-0010 — Restore a real breakpoint scale
+**Date:** 2026-09-05 · **Status:** Accepted
+
+The previous `globals.css` pinned `sm`, `md`, `lg`, `xl` and `2xl` all to 1024px, so the site had
+exactly two layouts and every `md:`/`lg:`/`xl:` utility in the codebase fired at the same width —
+meaning much of the existing responsive markup is not doing what it reads as doing. `tokens.css`
+restores the conventional 640/768/1024/1280/1536 scale, which the directory's gallery grid and the
+dense admin tables both need in order to work at tablet widths. The cost is that every existing
+`md:`/`lg:` utility now behaves differently and must be re-checked as each page is rebuilt; Phase 5
+and Phase 6 rewrite those pages anyway, and the legacy pages are visually unchanged above 1024px
+and below 640px.
+
+## ADR-0011 — The design-literal check ships with a shrinking legacy allowlist
+**Date:** 2026-09-05 · **Status:** Accepted
+
+`scripts/check-design-literals.mjs` fails the build on any hardcoded colour, px value, duration,
+oversized radius or gradient outside `tokens.css`, but exempts the nineteen pre-rebuild files that
+Phase 5 and Phase 6 rewrite wholesale. Enforcing against them today would mean a red build for
+several weeks, and a gate that is always red is a gate everyone learns to skip — whereas a gate that
+is green today and blocks every *new* violation actually holds the line. The cost is that the rule is
+not yet true of the whole tree; each allowlist entry names the phase that deletes it, and removing
+the entry is part of finishing that phase.
