@@ -16,7 +16,7 @@ export type LogContext = {
 };
 
 const REDACTED = '[redacted]';
-const SENSITIVE = /^(email|password|token|secret|key|clerkid|bio|name|phone|address)$/i;
+const SENSITIVE = /^(email|password|passwordhash|token|tokenhash|secret|key|bio|name|phone|address)$/i;
 
 function scrub(value: unknown, depth = 0): unknown {
   if (depth > 4 || value == null) return value;

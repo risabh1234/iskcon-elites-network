@@ -56,8 +56,8 @@ domain/  ──▶  server/, lib/
 domain/  ──✗──▶  app/, components/
 ```
 
-Concretely: `PrismaClient` is imported only in `domain/*/repository.ts` and `server/db.ts`; Clerk's
-`auth()` is imported only in `server/auth.ts`; every mutation authorises through
+Concretely: `PrismaClient` is imported only in `domain/*/repository.ts` and `src/lib/prisma.ts`;
+sessions and password hashing are reached only through the auth layer; every mutation authorises through
 `server/policy.ts`'s `can(actor, action, resource)` as the first statement of the service method,
 never in the route handler; and nothing crosses a boundary by throwing — services return
 `Result<T, AppError>`. Route handlers are adapters: parse, get the actor, call the service, map the
@@ -106,7 +106,7 @@ Result<Dto, AppError>             never throw across the boundary
 ```
 
 - `server/policy.ts` holds every authorisation rule in one `can(actor, action, resource)`. It is
-  pure — no database, no Clerk — which is why every (role × action × ownership) combination is
+  pure — no database, no session — which is why every (role × action × ownership) combination is
   covered by tests. **Never write a role comparison anywhere else.**
 - `server/auth.ts` is the only module that resolves a request to an identity. `getActor()` reads the
   session cookie and returns an `Actor`.
@@ -119,7 +119,7 @@ Result<Dto, AppError>             never throw across the boundary
 - `server/errors.ts` maps each error kind to an HTTP status and a message safe to show a stranger.
   `cause` is for logs and is never serialised.
 - Mutating services short-circuit on `actor.kind !== 'user'` before any query (ADR-0015).
-- Responses are DTOs. `clerkId` never leaves the server; contact email is member-visible only.
+- Responses are DTOs. Password hashes never leave the server; contact email is member-visible only.
 
 ## Design direction — "Quiet Institution"
 
@@ -152,8 +152,8 @@ or invented members, carousels for primary content, centred paragraphs over 66ch
 - Times are stored UTC with an IANA timezone alongside, and rendered in the *viewer's* timezone via
   `Intl`. This network is international; getting it wrong is the difference between attending and
   not.
-- Never return a raw Prisma model from a route — DTOs only, or `email` and `clerkId` leak to the
-  client.
+- Never return a raw Prisma model from a route — DTOs only, or `email` and `passwordHash` leak to
+  the client.
 - Every admin mutation writes an `AuditLog` row.
 
 ## Known-dangerous files (Phase 0 findings, not yet fixed)
