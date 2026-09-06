@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { describeEnvValue, normaliseEnvValue } from './env-value';
+import { describeEnvValue, normaliseEnvValue, unpackEmbeddedEnv } from './env-value';
 
 /**
  * Environment validation. Imported for its side effect by src/lib/prisma.ts, so
@@ -9,6 +9,24 @@ import { describeEnvValue, normaliseEnvValue } from './env-value';
  *
  * Phase 3 moves the Prisma singleton to src/server/db.ts; this module stays.
  */
+
+// If multiple variables were accidentally pasted into a single dashboard field,
+// unpack the additional variables into process.env so they are not lost.
+if (typeof process !== 'undefined' && process.env) {
+  for (const [key, val] of Object.entries(process.env)) {
+    if (typeof val === 'string') {
+      const { primary, extra } = unpackEmbeddedEnv(val);
+      if (Object.keys(extra).length > 0) {
+        process.env[key] = primary;
+        for (const [extraKey, extraVal] of Object.entries(extra)) {
+          if (!process.env[extraKey]) {
+            process.env[extraKey] = extraVal;
+          }
+        }
+      }
+    }
+  }
+}
 
 const url = z.string().url();
 

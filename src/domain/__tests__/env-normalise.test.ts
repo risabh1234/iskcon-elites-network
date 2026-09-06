@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeEnvValue, normaliseEnvValue } from '@/server/env-value';
+import { describeEnvValue, normaliseEnvValue, unpackEmbeddedEnv } from '@/server/env-value';
 
 /**
  * The Cloudflare build failed on `NEXT_PUBLIC_SUPABASE_URL: Invalid URL`, and
@@ -65,9 +65,9 @@ describe('normaliseEnvValue — invisible and typographic characters', () => {
 });
 
 describe('describeEnvValue', () => {
-  it('shows a NEXT_PUBLIC_ value in full — it ships to every browser anyway', () => {
+  it('previews a short public value, which is what identifies the mistake', () => {
     expect(describeEnvValue('NEXT_PUBLIC_SUPABASE_URL', 'abc.supabase.co')).toContain(
-      '"abc.supabase.co"',
+      'abc.supabase.co',
     );
   });
 
@@ -95,5 +95,69 @@ describe('describeEnvValue', () => {
 
   it('says so plainly when nothing was supplied', () => {
     expect(describeEnvValue('DATABASE_URL', undefined)).toBe('not set');
+  });
+});
+
+describe('describeEnvValue never leaks a secret, whatever variable holds it', () => {
+  /**
+   * The exact value that broke the Cloudflare build: four variables pasted into
+   * one dashboard field, so a `service_role` key ended up inside a
+   * `NEXT_PUBLIC_` variable — and an earlier version of this function printed
+   * `NEXT_PUBLIC_` values in full, on the reasoning that they are public by
+   * construction. A variable's name says where it is meant to go, never what it
+   * contains.
+   */
+  const pastedBlock =
+    'https://czg.supabase.co" NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSJ9.v8Ly69ibgBX3N3YhXptXgUxIiNPz2ZjIYxZniSAPSf" SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSJ9.xJHdlNggRfkKoYfL2VTq-TzHQ3vpbUvmatuo4-nZQJs"';
+
+  it('does not print a JWT found inside a public variable', () => {
+    const described = describeEnvValue('NEXT_PUBLIC_SUPABASE_URL', pastedBlock);
+    expect(described).not.toMatch(/eyJ[A-Za-z0-9_-]{8,}\./);
+    expect(described).not.toContain('xJHdlNggRfkKoYfL2VTq');
+    expect(described).not.toContain('v8Ly69ibgBX3N3YhXptXg');
+  });
+
+  it('names the mistake that caused it, in terms someone can act on', () => {
+    expect(describeEnvValue('NEXT_PUBLIC_SUPABASE_URL', pastedBlock)).toContain(
+      'SEVERAL VARIABLES PASTED INTO ONE FIELD',
+    );
+  });
+
+  it('redacts a bare JWT anywhere it appears', () => {
+    const jwt =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSJ9.xJHdlNggRfkKoYfL2VTq';
+    expect(describeEnvValue('NEXT_PUBLIC_ANYTHING', jwt)).not.toContain('xJHdlNggRfkKoYfL2VTq');
+  });
+
+  it('redacts credentials embedded in a connection string', () => {
+    const described = describeEnvValue(
+      'NEXT_PUBLIC_MISCONFIGURED',
+      'postgresql://user:hunter2@db.example.co:6543/postgres',
+    );
+    expect(described).not.toContain('hunter2');
+  });
+
+  it('caps the preview, so a long paste cannot spill into the log', () => {
+    const long = `https://a.co ${'x'.repeat(500)}`;
+    const described = describeEnvValue('NEXT_PUBLIC_SITE_URL', long);
+    expect(described.length).toBeLessThan(220);
+  });
+
+  it('still never previews a non-public variable at all', () => {
+    const described = describeEnvValue('DATABASE_URL', 'postgresql://u:p@host/db');
+    expect(described).not.toContain('host');
+    expect(described).toContain('characters');
+  });
+});
+
+describe('unpackEmbeddedEnv — multi-variable paste recovery', () => {
+  it('extracts primary value and embedded extra variables', () => {
+    const pasted =
+      'https://czgybxyroxlqqhyxrqhe.supabase.co" NEXT_PUBLIC_SUPABASE_ANON_KEY="anon-key" SUPABASE_SERVICE_ROLE_KEY="role-key"';
+    const { primary, extra } = unpackEmbeddedEnv(pasted);
+    expect(primary).toBe('https://czgybxyroxlqqhyxrqhe.supabase.co');
+    expect(extra.NEXT_PUBLIC_SUPABASE_ANON_KEY).toBe('anon-key');
+    expect(extra.SUPABASE_SERVICE_ROLE_KEY).toBe('role-key');
+    expect(normaliseEnvValue(pasted)).toBe('https://czgybxyroxlqqhyxrqhe.supabase.co');
   });
 });

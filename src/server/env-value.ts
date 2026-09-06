@@ -56,43 +56,125 @@ function stripOneQuoteLayer(value: string): string {
   return value;
 }
 
+/**
+ * Detects and unpacks multiple environment variables that were accidentally
+ * pasted into a single dashboard input field, e.g. when copying multiple lines
+ * out of a .env file.
+ */
+export function unpackEmbeddedEnv(raw: string | undefined): {
+  primary: string | undefined;
+  extra: Record<string, string>;
+} {
+  if (!raw) return { primary: raw, extra: {} };
+  const splitRegex = /(?:\r?\n|\s+)(?=[A-Z_][A-Z0-9_]*=)/;
+  if (!splitRegex.test(raw)) {
+    return { primary: raw, extra: {} };
+  }
+  const parts = raw.split(splitRegex);
+  const primaryRaw = parts[0].replace(INVISIBLE, '').trim();
+  const primary = stripOneQuoteLayer(primaryRaw).replace(/^['"“‘«]+|['"”’»]+$/g, '').trim();
+  const extra: Record<string, string> = {};
+  for (let i = 1; i < parts.length; i++) {
+    const eq = parts[i].indexOf('=');
+    if (eq > 0) {
+      const k = parts[i].slice(0, eq).trim();
+      let v = parts[i].slice(eq + 1).replace(INVISIBLE, '').trim();
+      v = stripOneQuoteLayer(v).replace(/^['"“‘«]+|['"”’»]+$/g, '').trim();
+      extra[k] = v;
+    }
+  }
+  return { primary: primary.length > 0 ? primary : undefined, extra };
+}
+
 export function normaliseEnvValue(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
 
+  // Handle multi-variable pastes into a single field
+  const { primary } = unpackEmbeddedEnv(value);
+  if (primary === undefined) return undefined;
+
   // Invisibles first: a zero-width space between the quote and the value would
   // otherwise stop the quote from being recognised as a quote.
-  const cleaned = stripOneQuoteLayer(value.replace(INVISIBLE, '').trim()).trim();
+  const cleaned = stripOneQuoteLayer(primary.replace(INVISIBLE, '').trim()).trim();
 
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
 /**
+ * Content that must never reach a log, wherever it is found.
+ *
+ * This list exists because of a specific incident, and the reasoning that
+ * produced it was wrong in an instructive way. The first version of this
+ * function printed `NEXT_PUBLIC_*` values in full, on the argument that they
+ * are compiled into the JavaScript every visitor downloads and so disclose
+ * nothing. That is true of a *correctly set* public variable. It is not true of
+ * a misconfigured one: a `NEXT_PUBLIC_SUPABASE_URL` field that had four
+ * variables pasted into it contained a `service_role` key, and printing the
+ * value put that key in a CI log.
+ *
+ * The rule that replaces it: a variable's name says where it is *meant* to go,
+ * never what it *contains*. Redaction is by content, applied to every value
+ * regardless of which schema it belongs to.
+ */
+const SECRET_SHAPES: readonly RegExp[] = [
+  // JSON Web Tokens — Supabase anon and service_role keys, among others.
+  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+  // Anything introduced as a key, secret, token or password.
+  /\b[A-Za-z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)[A-Za-z0-9_]*\s*=\s*\S+/gi,
+  // Credentials embedded in a connection string.
+  /:\/\/[^:@/\s]+:[^@/\s]+@/g,
+];
+
+/** A second variable assignment inside one value: the paste that caused this. */
+const LOOKS_LIKE_MULTIPLE = /\s[A-Za-z_][A-Za-z0-9_]*\s*=/;
+
+const PREVIEW_LIMIT = 60;
+
+function redact(value: string): string {
+  return SECRET_SHAPES.reduce(
+    (acc, pattern) => acc.replace(pattern, '[redacted]'),
+    value,
+  );
+}
+
+/**
  * What to print about a value that failed validation.
  *
- * "Invalid URL" without the offending value has failed at the one job an
- * environment validator has: the reader cannot see the variable (it is in a
- * dashboard, on another machine) and cannot see what the process read, so they
- * are left guessing at exactly the characters that do not render.
+ * "Invalid URL" without any description of the offending value has failed at
+ * the one job an environment validator has: the variable lives in a dashboard
+ * on another machine, so the reader cannot see what the process read and is
+ * left guessing at precisely the characters that do not render.
  *
- * `NEXT_PUBLIC_*` values are shown in full — they are compiled into the
- * JavaScript every visitor downloads, so they are public by construction and
- * nothing is disclosed by printing one in a build log. Everything else is
- * described but never shown: a length and a diagnosis is enough to identify a
- * paste error in a connection string without putting the password in the log.
+ * So it describes, and it redacts by content first (see SECRET_SHAPES). What
+ * survives is a short preview, a length, and the specific diagnosis — enough to
+ * recognise a paste error, never enough to leak the thing that was pasted.
  */
 export function describeEnvValue(key: string, value: string | undefined): string {
   if (value === undefined) return 'not set';
 
+  const trimmed = value.trim();
+
+  // Notes are taken from the original: redaction removes the very evidence
+  // that identifies the mistake.
   const notes: string[] = [];
-  if (value !== value.trim()) notes.push('surrounding whitespace');
+  if (LOOKS_LIKE_MULTIPLE.test(trimmed)) {
+    notes.push('SEVERAL VARIABLES PASTED INTO ONE FIELD — set them separately');
+  }
+  if (value !== trimmed) notes.push('surrounding whitespace');
   if (HAS_INVISIBLE.test(value)) notes.push('invisible characters');
-  if (stripOneQuoteLayer(value.trim()) !== value.trim()) notes.push('wrapping quotes');
-  if (/\s/.test(value.trim())) notes.push('an internal space or line break');
-  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(value.trim())) notes.push('no https:// scheme');
+  if (stripOneQuoteLayer(trimmed) !== trimmed) notes.push('wrapping quotes');
+  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(trimmed)) notes.push('no https:// scheme');
 
-  const detail = notes.length > 0 ? ` — looks like ${notes.join(', ')}` : '';
+  const safe = redact(trimmed);
+  const preview =
+    safe.length > PREVIEW_LIMIT ? `${safe.slice(0, PREVIEW_LIMIT)}…` : safe;
 
+  const detail = notes.length > 0 ? `\n      looks like ${notes.join(', ')}` : '';
+
+  // Secrets are described but never previewed, even redacted: the schema a
+  // variable belongs to is a weaker signal than its content, and this is the
+  // belt to redaction's braces.
   return key.startsWith('NEXT_PUBLIC_')
-    ? `received ${JSON.stringify(value)}${detail}`
+    ? `received ${value.length} characters: ${JSON.stringify(preview)}${detail}`
     : `received ${value.length} characters${detail}`;
 }
