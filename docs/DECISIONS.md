@@ -567,3 +567,23 @@ will not be back-filled, because inventing an uploader and a date for them would
 audit data; and a failure between the object write and the row write leaves an orphan object in the
 bucket, which is the correct way round — an unreferenced file costs storage, a row pointing at a
 file that was never stored costs a broken page.
+
+## ADR-0044 — Environment values are normalised before they are validated
+**Date:** 2026-09-06 · **Status:** Accepted
+
+The Cloudflare build failed with `NEXT_PUBLIC_SUPABASE_URL: Invalid URL`. The URL was correct; it
+was wrapped in quotes. `.env.local` is parsed by dotenv, which strips them — a hosting dashboard is
+a plain text field, which does not. Copying the line out of one and into the other is the obvious
+thing to do and produces an error message that points at the URL rather than at the two characters
+around it.
+
+`src/server/env-value.ts` now trims and strips one layer of matching quotes from every declared
+variable before the schema sees it, and blank-after-trimming is read as absent. Stripping is safe
+because no value this app reads legitimately begins and ends with the same quote character; it is
+deliberately not extended to guessing a missing scheme, because `abc.supabase.co` could become
+`https://` or `http://` and silently pointing the app at a host nobody named is worse than failing.
+The error message now names both pitfalls.
+
+It is a separate module from `env.ts` because `env.ts` validates on import and throws: a pure string
+helper must not be reachable only through a module that can refuse to load, which is also what makes
+it testable.

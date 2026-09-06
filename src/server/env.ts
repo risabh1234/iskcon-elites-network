@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normaliseEnvValue } from './env-value';
 
 /**
  * Environment validation. Imported for its side effect by src/lib/prisma.ts, so
@@ -10,6 +11,7 @@ import { z } from 'zod';
  */
 
 const url = z.string().url();
+
 
 const optionalNonEmptyString = z
   .string()
@@ -72,10 +74,20 @@ const clientSchema = z.object({
  * literally, so client keys are read by their full name rather than destructured.
  */
 const rawClient = {
-  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
-  NEXT_PUBLIC_ADMIN_HOST: process.env.NEXT_PUBLIC_ADMIN_HOST,
+  NEXT_PUBLIC_SUPABASE_URL: normaliseEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL),
+  NEXT_PUBLIC_SITE_URL: normaliseEnvValue(process.env.NEXT_PUBLIC_SITE_URL),
+  NEXT_PUBLIC_ADMIN_HOST: normaliseEnvValue(process.env.NEXT_PUBLIC_ADMIN_HOST),
 };
+
+/** The same normalisation, over every variable the server schema declares. */
+function rawServer(): Record<string, unknown> {
+  const source = process.env as Record<string, string | undefined>;
+  const out: Record<string, unknown> = { ...source };
+  for (const key of Object.keys(serverSchema.shape)) {
+    out[key] = normaliseEnvValue(source[key]);
+  }
+  return out;
+}
 
 function format(issues: z.core.$ZodIssue[]): string {
   return issues.map((i) => `  • ${i.path.join('.') || '(root)'}: ${i.message}`).join('\n');
@@ -87,7 +99,7 @@ function load() {
   const isServer = typeof window === 'undefined';
 
   const client = clientSchema.safeParse(rawClient);
-  const server = isServer ? serverSchema.safeParse(process.env) : null;
+  const server = isServer ? serverSchema.safeParse(rawServer()) : null;
 
   const issues = [
     ...(client.success ? [] : client.error.issues),
@@ -97,6 +109,9 @@ function load() {
   if (issues.length > 0) {
     throw new Error(
       `Invalid environment configuration:\n${format(issues)}\n\n` +
+        `A URL must include its scheme — https://x.supabase.co, not x.supabase.co.\n` +
+        `Quotes and stray whitespace are stripped for you, so a value copied\n` +
+        `straight out of .env.local into a dashboard field is safe to paste.\n\n` +
         `See .env.example for the full list of variables and where to obtain each one.`,
     );
   }
