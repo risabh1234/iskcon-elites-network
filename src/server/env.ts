@@ -11,28 +11,35 @@ import { z } from 'zod';
 
 const url = z.string().url();
 
+const optionalNonEmptyString = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(''))
+  .transform((v) => (v ? v : undefined));
+
 const serverSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   // Postgres. DATABASE_URL is the pooled connection used at runtime;
   // DIRECT_URL is the unpooled one the Prisma CLI needs for migrations.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  DIRECT_URL: z.string().min(1).optional(),
+  DIRECT_URL: optionalNonEmptyString,
 
   // Google Sign-In. Optional: the button is hidden until both are present, so
   // the app runs on email and password alone until the keys are added.
-  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
-  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CLIENT_ID: optionalNonEmptyString,
+  GOOGLE_CLIENT_SECRET: optionalNonEmptyString,
 
   // Supabase. The service-role key is the current upload path's credential and
   // must never reach the client — note the deliberate absence of NEXT_PUBLIC_.
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
 
   // Parent domain to scope the session cookie to, e.g. ".example.org", so one
   // sign-in covers the site and the console subdomain. Left unset the cookie is
   // host-only, which is the safer default and the right one on a single host:
   // widening it shares the session with every subdomain that exists.
-  SESSION_COOKIE_DOMAIN: z.string().min(1).optional(),
+  SESSION_COOKIE_DOMAIN: optionalNonEmptyString,
 
   // Object storage. Optional today: the S3/R2 client is wired but unused, and
   // uploads go to Supabase Storage. See docs/AUDIT.md §8.
