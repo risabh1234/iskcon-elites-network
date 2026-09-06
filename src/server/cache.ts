@@ -17,6 +17,7 @@ export const tags = {
   events: () => 'events',
   story: (id: string) => `story:${id}`,
   stories: () => 'stories',
+  leadership: () => 'leadership',
   users: () => 'users',
 };
 

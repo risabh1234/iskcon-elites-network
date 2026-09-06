@@ -2,6 +2,7 @@ import { can, type Actor, type Role } from '@/server/policy';
 import { forbidden, notFound, unauthenticated, validation, conflict, internal } from '@/server/errors';
 import { err, ok, type Result } from '@/server/result';
 import { invalidate, tags } from '@/server/cache';
+import { isDesignatedAdministrator } from '@/server/administrators';
 import * as repo from './repository';
 import { toUserDto, type SelfDto, type UserDto } from './dto';
 import { updatePermissionsSchema, updateRoleSchema } from './schema';
@@ -42,9 +43,16 @@ export async function updateUserRole(
     !can(actor, 'user:update:role', {
       targetUserId: target.id,
       targetRole: target.role as Role,
+      targetIsProtected: isDesignatedAdministrator(target.email),
     })
   ) {
-    return err(forbidden('You cannot change that user’s role.'));
+    return err(
+      forbidden(
+        isDesignatedAdministrator(target.email)
+          ? 'That account holds the register by standing arrangement and its role cannot be changed here.'
+          : 'You cannot change that user’s role.',
+      ),
+    );
   }
 
   const parsed = updateRoleSchema.safeParse(input);
@@ -102,7 +110,11 @@ export async function deleteUser(actor: Actor, targetUserId: string): Promise<Re
   if (!target) return err(notFound('That user could not be found.'));
 
   if (
-    !can(actor, 'user:delete', { targetUserId: target.id, targetRole: target.role as Role })
+    !can(actor, 'user:delete', {
+      targetUserId: target.id,
+      targetRole: target.role as Role,
+      targetIsProtected: isDesignatedAdministrator(target.email),
+    })
   ) {
     return err(forbidden('You cannot remove that user.'));
   }

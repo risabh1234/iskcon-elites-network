@@ -5,22 +5,18 @@ import {
 import { EmptyState, PageHeader } from '@/components/patterns';
 import { getActor } from '@/server/auth';
 import { listAssets } from '@/domain/media/service';
+import { formatBytes } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Media' };
-
-function bytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /**
  * Recorded assets.
  *
- * Uploads currently write to a public Supabase bucket and return a URL without
- * creating a `MediaAsset` row, so this table is empty on a live database. That
- * is stated plainly rather than papered over: Phase 7 moves uploads to R2 with
- * enforced crops and blurhash placeholders, and this page becomes useful then.
+ * Every upload now writes a `MediaAsset` row, so this table lists what is
+ * actually in the bucket — portraits, leadership photographs and published
+ * PDFs alike. Rows predating that change do not exist: uploads made before it
+ * returned a URL and recorded nothing, and inventing rows for them would mean
+ * inventing an uploader and a date.
  */
 export default async function AdminMediaPage() {
   const result = await listAssets(await getActor());
@@ -60,7 +56,7 @@ export default async function AdminMediaPage() {
                   <TableRow key={asset.id}>
                     <TableCell className="text-ink">{asset.key}</TableCell>
                     <TableCell>{asset.mime}</TableCell>
-                    <TableCell align="end" data-numeric>{bytes(asset.bytes)}</TableCell>
+                    <TableCell align="end" data-numeric>{formatBytes(asset.bytes)}</TableCell>
                     <TableCell align="end" data-numeric>
                       {asset.width && asset.height ? `${asset.width}×${asset.height}` : '—'}
                     </TableCell>

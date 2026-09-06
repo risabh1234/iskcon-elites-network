@@ -474,3 +474,96 @@ The step most likely to fail is not the dump: it is whether `Member.searchVector
 generated column that Prisma does not manage — survives the round trip along with its GIN index.
 Losing it silently disables search rather than erroring. That check is written into the drill steps
 for exactly that reason.
+
+## ADR-0039 — Leadership is its own entity, not a `Member` with a flag
+**Date:** 2026-09-06 · **Status:** Accepted
+
+The page naming the people behind the network could have been two rows in `Member` with a `kind` of
+`LEADER`. It is a separate `LeadershipProfile` table instead, because the two entities answer
+different questions and are governed by different rules: a directory entry is *submitted* by its
+subject and *reviewed*, while a leadership profile is written by reviewers and speaks in the
+institution's own voice. It carries published documents, which no directory entry does, and it must
+never appear in a directory query.
+
+Folding them together would mean every directory filter, the search vector, the approval queue and
+the sitemap growing a "…and not the leaders" exception. That is precisely the category branching
+the `Alumnus`/`Speaker` unification removed (ADR-0011), and re-introducing it for a page with one
+row would be trading a table for a permanent tax on every query.
+
+The policy layer reflects the difference: `leadership:update` has no ownership branch at all. There
+is no "my own" version of a page that speaks for the institution.
+
+## ADR-0040 — The profile is plain text with two rendering rules, not a rich-text editor
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`bio`, `focusAreas` and `initiatives` are plain `Text`. A blank line separates paragraphs; one item
+per line makes a list. Both rules are stated on the field in the console, and both are applied in
+`domain/leadership/dto.ts` so that no component ever parses prose.
+
+A WYSIWYG field would have been friendlier for about a week. It is also a sanitisation surface that
+has to be maintained forever, a second serialisation format to migrate, and a reliable source of
+pasted `<span style>` from Word that fights the type scale. What is actually being edited is four
+paragraphs and two lists.
+
+The cost is honest and worth recording: there is no way to bold a word, and adding one later means
+choosing a markup format and a renderer, not just swapping the input.
+
+## ADR-0041 — The console's subdomain redirects; it never rewrites paths
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`NEXT_PUBLIC_ADMIN_HOST` puts the console on its own hostname. Unset — which is the state until a
+domain exists — every rule is a no-op and the app behaves exactly as before.
+
+The tempting implementation is to rewrite `/` to `/admin` on that host, so the console lives at
+`admin.example.org/members`. It was rejected. A rewrite means every link in the console has to know
+which hostname it was rendered on, and the first one that forgets sends a reviewer to a 404 on a
+domain that cannot be reproduced locally. `src/server/hosting.ts` therefore only ever *redirects*:
+the bare subdomain opens `/admin`, public paths on the admin host bounce to the public host,
+`/admin` on the public host is 308'd to the subdomain. URLs read `admin.example.org/admin/members`,
+which is mildly redundant and completely predictable.
+
+Two consequences that are easy to miss and are handled: a session cookie set on the public host is
+not sent to a subdomain, so `/sign-in` is served on the admin host too and `SESSION_COOKIE_DOMAIN`
+exists for deployments that would rather share one session across both; and `robots.ts` returns
+`Disallow: /` on the admin host, because serving the public site's robots.txt there invites the
+indexing of a hostname that only ever answers with a sign-in form.
+
+The rules are pure and unit-tested in `src/domain/__tests__/hosting.test.ts`. That is not
+belt-and-braces: no domain exists yet, so the tests are the only thing standing between the
+configuration and a reviewer locked out of a host nobody can reach.
+
+## ADR-0042 — Two designated administrator addresses, reconciled at every sign-in
+**Date:** 2026-09-06 · **Status:** Accepted
+
+`src/server/administrators.ts` names two addresses that hold the register by standing arrangement.
+An account created with one of them is SUPERADMIN from its first request, by password or by Google,
+and the role is reasserted on every subsequent sign-in.
+
+Reconciling on sign-in rather than only at registration is the point: it covers an account that
+existed before the list did, a restored backup, and an accidental demotion. "The first account to
+register becomes SUPERADMIN" remains, but it is a bootstrap that works exactly once on an empty
+database and answers nothing about who is in charge afterwards.
+
+Because the role is reasserted, the console must not offer to change it — a control that appears to
+work and silently reverts at the next sign-in is worse than one that refuses. `can()` refuses via
+`targetIsProtected`, which the caller computes; the policy module stays pure and never learns what
+an email address is. The users table shows the reason next to the name rather than presenting a
+dead control.
+
+`ADMIN_EMAILS` can add addresses per deployment but cannot remove the two: an environment variable
+is not where "who runs this institution" should be decided.
+
+## ADR-0043 — Every upload now records a `MediaAsset` row
+**Date:** 2026-09-06 · **Status:** Accepted
+
+Uploads previously wrote an object to the bucket and returned a URL, recording nothing. `MediaAsset`
+existed in the schema, was referenced by three foreign keys, and had never held a row — so
+`/admin/media` listed a table that could not be populated, and an uploaded file had no owner, no
+size and no way to be found again.
+
+`domain/media/service.ts` now writes the row as part of the upload and returns its id, which is what
+`LeadershipMedia` stores. Two follow-ons worth stating: rows predating this change do not exist and
+will not be back-filled, because inventing an uploader and a date for them would be inventing
+audit data; and a failure between the object write and the row write leaves an orphan object in the
+bucket, which is the correct way round — an unreferenced file costs storage, a row pointing at a
+file that was never stored costs a broken page.

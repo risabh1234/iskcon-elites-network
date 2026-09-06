@@ -9,6 +9,7 @@ import {
   setSessionCookie,
 } from '@/server/auth/session';
 import type { GoogleProfile } from '@/server/auth/google';
+import { isDesignatedAdministrator } from '@/server/administrators';
 import * as repo from './repository';
 import { signInSchema, signUpSchema } from './schema';
 
@@ -51,10 +52,12 @@ export async function signUp(
   }
 
   try {
-    // The very first account to register becomes the administrator, because a
-    // fresh install otherwise has no way into its own console. Every later
-    // account is a plain USER — this is a bootstrap, not a promotion path.
+    // Two ways in. The very first account to register becomes the
+    // administrator, because a fresh install otherwise has no way into its own
+    // console — a bootstrap, not a promotion path. A designated address is the
+    // standing arrangement, and holds whether it registers first or thousandth.
     const first = await repo.isFirstUser();
+    const designated = isDesignatedAdministrator(email);
 
     const user = await repo.createUser({
       email,
@@ -63,7 +66,7 @@ export async function signUp(
       emailVerifiedAt: null,
     });
 
-    if (first) await repo.promoteToSuperadmin(user.id);
+    if (first || designated) await repo.promoteToSuperadmin(user.id);
 
     const token = await createSession(user.id, context.userAgent);
     await setSessionCookie(token);
@@ -106,6 +109,13 @@ export async function signIn(
     // signed in. They never see it and never have to reset anything.
     if (needsRehash(user.passwordHash)) {
       await repo.setPasswordHash(user.id, await hashPassword(password));
+    }
+
+    // The standing arrangement is reasserted here rather than only at
+    // registration, so it also covers an account that predates the list, a
+    // restored backup, and an accidental demotion.
+    if (isDesignatedAdministrator(user.email)) {
+      await repo.restoreSuperadmin(user.id);
     }
 
     const token = await createSession(user.id, context.userAgent);
@@ -157,6 +167,7 @@ export async function signInWithGoogle(
         await repo.markEmailVerified(userId);
       } else {
         const first = await repo.isFirstUser();
+        const designated = isDesignatedAdministrator(profile.email);
         const created = await repo.createUser({
           email: profile.email,
           name: profile.name ?? profile.email.split('@')[0]!,
@@ -164,11 +175,15 @@ export async function signInWithGoogle(
           passwordHash: null,
           emailVerifiedAt: profile.emailVerified ? new Date() : null,
         });
-        if (first) await repo.promoteToSuperadmin(created.id);
+        if (first || designated) await repo.promoteToSuperadmin(created.id);
         userId = created.id;
         user = created;
         await repo.linkAccount(userId, 'google', profile.sub);
       }
+    }
+
+    if (isDesignatedAdministrator(user?.email ?? profile.email)) {
+      await repo.restoreSuperadmin(userId);
     }
 
     const token = await createSession(userId, context.userAgent);

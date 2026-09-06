@@ -28,6 +28,7 @@ const ALL_ACTIONS: Action[] = [
   'member:read', 'member:read:unpublished', 'member:create', 'member:update',
   'member:delete', 'member:approve',
   'event:read', 'event:read:unpublished', 'event:create', 'event:update', 'event:delete',
+  'leadership:read', 'leadership:read:unpublished', 'leadership:update', 'leadership:media:manage',
   'story:read', 'story:create', 'story:update', 'story:delete',
   'mentorship:request', 'mentorship:decide',
   'user:read', 'user:update:role', 'user:update:permissions', 'user:delete',
@@ -46,21 +47,25 @@ describe('can() — exhaustiveness', () => {
 });
 
 describe('anonymous visitors', () => {
-  it('may read published members, events and stories', () => {
+  it('may read published members, events, stories and leadership profiles', () => {
     expect(can(anon, 'member:read', { isPublished: true })).toBe(true);
     expect(can(anon, 'event:read', { isPublished: true })).toBe(true);
     expect(can(anon, 'story:read', { isPublished: true })).toBe(true);
+    expect(can(anon, 'leadership:read', { isPublished: true })).toBe(true);
   });
 
   it('may NOT read unpublished records — the hole that leaked pending profiles', () => {
     expect(can(anon, 'member:read', { isPublished: false })).toBe(false);
     expect(can(anon, 'event:read', { isPublished: false })).toBe(false);
     expect(can(anon, 'story:read', { isPublished: false })).toBe(false);
+    expect(can(anon, 'leadership:read', { isPublished: false })).toBe(false);
     expect(can(anon, 'member:read:unpublished')).toBe(false);
   });
 
   it('may do nothing else at all', () => {
-    const readable = new Set<Action>(['member:read', 'event:read', 'story:read']);
+    const readable = new Set<Action>([
+      'member:read', 'event:read', 'story:read', 'leadership:read',
+    ]);
     for (const action of ALL_ACTIONS) {
       if (readable.has(action)) continue;
       expect(can(anon, action), `anonymous should not be able to ${action}`).toBe(false);
@@ -94,6 +99,18 @@ describe('members (USER)', () => {
     const u = user('USER', { id: 'me' });
     expect(can(u, 'member:read', { isPublished: false, ownerId: 'me' })).toBe(true);
     expect(can(u, 'member:read', { isPublished: false, ownerId: 'other' })).toBe(false);
+  });
+
+  it('may read a published leadership profile and change nothing about it', () => {
+    // The page speaks for the institution: there is no "my own" version of it,
+    // so ownership never grants a write here the way it does for a directory
+    // entry.
+    const u = user('USER', { id: 'me' });
+    expect(can(u, 'leadership:read', { isPublished: true })).toBe(true);
+    expect(can(u, 'leadership:read', { isPublished: false })).toBe(false);
+    expect(can(u, 'leadership:read:unpublished')).toBe(false);
+    expect(can(u, 'leadership:update', { ownerId: 'me' })).toBe(false);
+    expect(can(u, 'leadership:media:manage', { ownerId: 'me' })).toBe(false);
   });
 
   it('has no access to the console or to other users', () => {
@@ -143,6 +160,13 @@ describe.each(['ADMIN', 'SUPERADMIN'] as const)('%s', (role) => {
     expect(can(admin, 'event:create')).toBe(true);
     expect(can(admin, 'event:update', { ownerId: 'other' })).toBe(true);
     expect(can(admin, 'event:delete', { ownerId: 'other' })).toBe(true);
+  });
+
+  it('may edit a leadership profile and publish files on it', () => {
+    expect(can(admin, 'leadership:read', { isPublished: false })).toBe(true);
+    expect(can(admin, 'leadership:read:unpublished')).toBe(true);
+    expect(can(admin, 'leadership:update')).toBe(true);
+    expect(can(admin, 'leadership:media:manage')).toBe(true);
   });
 
   it('may reach the console and read users', () => {

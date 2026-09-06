@@ -45,6 +45,7 @@ model User {
   uploadedAssets   MediaAsset[]
   auditEntries     AuditLog[]
   sentInvitations  Invitation[]
+  leadershipEdits  LeadershipProfile[] @relation("LeadershipUpdatedBy")
 
   @@index([role])
 }
@@ -444,6 +445,115 @@ enum StoryStatus {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// Leadership
+// ══════════════════════════════════════════════════════════════════════════
+
+/// A person who carries the initiative rather than one who is listed in it.
+///
+/// Deliberately NOT a `Member` with a flag. A directory entry answers "who is
+/// in the register"; this answers "on whose authority does the register
+/// exist" — it is edited by reviewers rather than submitted for review, it
+/// carries published documents, and it is never returned by a directory query.
+/// Folding the two together would mean every directory filter growing an
+/// exception, which is exactly the branching the Member unification removed.
+model LeadershipProfile {
+  id   String @id @default(uuid())
+  slug String @unique
+
+  /// "His Grace", "His Holiness". A separate field because it is a form of
+  /// address, not part of the name, and must not be searched or sorted on.
+  honorific     String?
+  /// The name they are known by publicly.
+  name          String
+  /// The name they were given at initiation, where it differs.
+  initiatedName String?
+
+  /// Office held, e.g. "Vice President, ISKCON Bhubaneswar".
+  role     String?
+  /// One line, shown under the name. Not a biography.
+  headline String?
+
+  /// Long form. Blank lines separate paragraphs; nothing else is interpreted,
+  /// because a rich-text editor in an admin console is a sanitisation problem
+  /// nobody has time to maintain (ADR-0040).
+  bio String @db.Text
+
+  /// One per line. Rendered as a list of what this person teaches or advises on.
+  focusAreas String? @db.Text
+  /// One per line. Projects the network can point at.
+  initiatives String? @db.Text
+
+  status LeadershipStatus @default(DRAFT)
+
+  /// Ascending. Ties break on name, so ordering is total and the page does not
+  /// reshuffle between requests.
+  orderIndex Int @default(0)
+
+  portraitAssetId String?     @unique
+  portraitAsset   MediaAsset? @relation("LeadershipPortrait", fields: [portraitAssetId], references: [id], onDelete: SetNull)
+
+  /// Alt text for the portrait. Required by the service whenever a portrait is
+  /// set: an unlabelled photograph of a person is unusable to a screen reader.
+  portraitAlt String?
+
+  media LeadershipMedia[]
+
+  updatedById String?
+  updatedBy   User?   @relation("LeadershipUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Soft delete, as everywhere else. A profile that carried the institution's
+  /// name is part of its history.
+  deletedAt DateTime?
+
+  @@index([status, orderIndex])
+  @@index([deletedAt])
+}
+
+enum LeadershipStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// A photograph or a document published alongside a leadership profile.
+///
+/// The file itself is a MediaAsset, so uploads made here appear in the media
+/// console like every other upload; this row carries what the asset table
+/// cannot know — what the file is for, what to caption it, and where it sits
+/// in the order.
+model LeadershipMedia {
+  id String @id @default(uuid())
+
+  profileId String
+  profile   LeadershipProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  assetId String     @unique
+  asset   MediaAsset @relation("LeadershipMediaAsset", fields: [assetId], references: [id], onDelete: Cascade)
+
+  kind LeadershipMediaKind
+
+  /// Shown as the link text for a document and the alt text for a photograph,
+  /// so it is required rather than optional.
+  title       String
+  description String? @db.Text
+
+  orderIndex Int @default(0)
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  @@index([profileId, kind, orderIndex])
+  @@index([deletedAt])
+}
+
+enum LeadershipMediaKind {
+  PHOTO
+  DOCUMENT
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // Media & audit
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -468,6 +578,8 @@ model MediaAsset {
   memberAvatar Member?       @relation("MemberAvatar")
   eventCover   Event?        @relation("EventCover")
   storyCover   SuccessStory? @relation("StoryCover")
+  leadershipPortrait LeadershipProfile? @relation("LeadershipPortrait")
+  leadershipMedia    LeadershipMedia?   @relation("LeadershipMediaAsset")
 
   @@index([uploadedById])
 }

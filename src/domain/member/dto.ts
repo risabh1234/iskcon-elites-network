@@ -1,4 +1,5 @@
 import type { Actor } from '@/server/policy';
+import { assetUrl } from '@/lib/assets';
 
 export type MemberKind = 'ALUMNUS' | 'SPEAKER' | 'GUEST';
 export type MemberStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
@@ -98,12 +99,6 @@ export type MemberDto = {
  */
 const canSeeContact = (actor: Actor) => actor.kind === 'user';
 
-function publicUrl(asset: MemberRecord['avatarAsset']): string | null {
-  if (!asset) return null;
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  return base ? `${base}/storage/v1/object/public/${asset.bucket}/${asset.key}` : null;
-}
-
 function locationOf(record: { city: string | null; countryCode: string | null }): string | null {
   if (!record.city && !record.countryCode) return null;
   if (!record.countryCode) return record.city;
@@ -151,7 +146,7 @@ export function toMemberDto(record: MemberRecord, actor: Actor): MemberDto {
     story: record.story,
     recommendation: record.recommendation,
     status: record.status,
-    avatarUrl: publicUrl(record.avatarAsset),
+    avatarUrl: assetUrl(record.avatarAsset),
     blurhash: record.avatarAsset?.blurhash ?? null,
     expertise,
     organizations,

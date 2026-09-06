@@ -28,6 +28,12 @@ const serverSchema = z.object({
   // must never reach the client — note the deliberate absence of NEXT_PUBLIC_.
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 
+  // Parent domain to scope the session cookie to, e.g. ".example.org", so one
+  // sign-in covers the site and the console subdomain. Left unset the cookie is
+  // host-only, which is the safer default and the right one on a single host:
+  // widening it shares the session with every subdomain that exists.
+  SESSION_COOKIE_DOMAIN: z.string().min(1).optional(),
+
   // Object storage. Optional today: the S3/R2 client is wired but unused, and
   // uploads go to Supabase Storage. See docs/AUDIT.md §8.
   S3_BUCKET_NAME: z.string().optional(),
@@ -40,6 +46,18 @@ const clientSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: url.optional().or(z.literal('')),
   /** Absolute origin, used to build the OAuth redirect URI in production. */
   NEXT_PUBLIC_SITE_URL: url.optional().or(z.literal('')),
+  /**
+   * Hostname the console is served on, e.g. "admin.example.org" — a host, not
+   * a URL, because it is compared against the Host header. Unset means the
+   * console stays at /admin on the main site, which is the correct
+   * configuration until a domain exists.
+   */
+  NEXT_PUBLIC_ADMIN_HOST: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9.-]+(:\d+)?$/i, 'NEXT_PUBLIC_ADMIN_HOST is a hostname, not a URL')
+    .optional()
+    .or(z.literal('')),
 });
 
 /**
@@ -49,6 +67,7 @@ const clientSchema = z.object({
 const rawClient = {
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+  NEXT_PUBLIC_ADMIN_HOST: process.env.NEXT_PUBLIC_ADMIN_HOST,
 };
 
 function format(issues: z.core.$ZodIssue[]): string {

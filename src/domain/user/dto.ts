@@ -1,4 +1,5 @@
 import type { Role } from '@/server/policy';
+import { isDesignatedAdministrator } from '@/server/administrators';
 
 /** Admin-facing. */
 export type UserDto = {
@@ -9,6 +10,12 @@ export type UserDto = {
   role: Role;
   canCreateEvents: boolean;
   createdAt: string;
+  /**
+   * A designated administrator (src/server/administrators.ts). The console
+   * shows it and disables the role control — not as security, which lives in
+   * the policy layer, but so the page does not offer a change it will refuse.
+   */
+  isProtected: boolean;
 };
 
 /** What the signed-in user learns about themselves. */
@@ -39,5 +46,6 @@ export function toUserDto(record: UserRecord): UserDto {
     role: record.role as Role,
     canCreateEvents: record.canCreateEvents,
     createdAt: record.createdAt.toISOString(),
+    isProtected: isDesignatedAdministrator(record.email),
   };
 }

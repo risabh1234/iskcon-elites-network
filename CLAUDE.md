@@ -171,6 +171,9 @@ for. See `docs/AUDIT.md` §6.
   filtered list.
 - `/directory/[slug]` — slugs are canonical. A UUID in the segment 308-redirects to the slug.
 - `/events` — upcoming/past tabs, real `.ics` download, optimistic registration with capacity.
+- `/leadership` — the people behind the initiative: portrait, prose bio, what they speak on, what
+  they have built, plus published photographs and PDFs. Editable in the console; nothing on it is
+  hardcoded in a component.
 - `/` — four movements only: Statement, Proof, What the network does, Entry. **Never seed it with
   invented members**; if the register cannot be read, the Proof section simply does not render.
 - Every route has a designed loading, error and empty state. No page component over 200 lines
@@ -178,8 +181,8 @@ for. See `docs/AUDIT.md` §6.
 
 ## The console
 
-`src/app/(admin)/admin/{members,events,stories,users,media,audit}` with a shared shell — sidebar,
-breadcrumb, ⌘K palette. Rules that hold here:
+`src/app/(admin)/admin/{members,events,stories,leadership,users,media,audit}` with a shared shell —
+sidebar, breadcrumb, ⌘K palette. Rules that hold here:
 
 - **No file over 150 lines. No Prisma.** The console calls services like everything else.
 - The gate is `can(actor, 'admin:access')` in the layout, not the proxy. The proxy only checks that
@@ -202,6 +205,13 @@ breadcrumb, ⌘K palette. Rules that hold here:
   (ADR-0037) — an empty directory passes every budget and proves nothing.
 - **CSP lives in `src/proxy.ts`**, not `next.config.mjs`, because it carries a per-request nonce.
   Inline `style` attributes need `style-src-attr`, which CSP3 treats separately from `style-src`.
+- **The console can run on its own subdomain.** Set `NEXT_PUBLIC_ADMIN_HOST` to a hostname (not a
+  URL) and point it at the same deployment: the bare subdomain opens `/admin`, public paths on it
+  bounce to the public host, and `/admin` on the public host 308s across. Unset — the state until a
+  domain exists — every rule is a no-op. It **redirects and never rewrites** (ADR-0041), so URLs
+  stay `admin.example.org/admin/…` and no link has to know which host rendered it. `robots.ts`
+  returns `Disallow: /` on that host. Set `SESSION_COOKIE_DOMAIN` to the parent domain if one
+  sign-in should cover both, and register the extra Google redirect URI.
 - `/api/health` checks the database, so a 200 means the app can actually serve. Point the uptime
   monitor at it and alert on 503.
 - Errors go through `server/observability/report.ts`, which scrubs connection strings, email
@@ -236,7 +246,13 @@ One `Member` table with a `kind` enum — `Alumnus` and `Speaker` are gone. Key 
 - **Status enums, not booleans.** `MemberStatus`, `EventStatus`, `StoryStatus`.
 - **Events are a UTC instant plus an IANA zone.** Never a local time alone. Validate zones with the
   schema's `ianaTimezone`, which rejects ambiguous abbreviations like `IST` (ADR-0022).
-- **Every admin mutation writes an `AuditLog` row** via `domain/audit/service.ts`.
+- **Every admin mutation writes an `AuditLog` row** via `domain/audit/service.ts`. Long prose is
+  recorded as a length, never as a diff — see `leadership.update`.
+- **Leadership profiles are their own table**, not `Member` rows with a flag (ADR-0039). `bio`,
+  `focusAreas` and `initiatives` are plain text: blank lines separate paragraphs, one item per line
+  makes a list, and `domain/leadership/dto.ts` is the only place that parses either (ADR-0040).
+- **Every upload records a `MediaAsset` row** and returns its id (ADR-0043). Images and PDFs both;
+  `assetUrl()` in `src/lib/assets.ts` is the one place a bucket and key become a URL.
 - **Search** is a weighted `tsvector` generated column plus `pg_trgm` for typo tolerance, queried
   with raw SQL in `member/repository.ts`. Expertise is filtered through its indexed join rather than
   being in the vector — see ADR-0021 for why.
@@ -257,3 +273,9 @@ button stays hidden until both keys are present, so nothing breaks before they a
 
 **The first account to register becomes SUPERADMIN.** That is a bootstrap for a fresh install, not a
 promotion path — register yourself first.
+
+**Two addresses hold the register by standing arrangement** — they are listed in
+`src/server/administrators.ts`, are SUPERADMIN from their first request whether they sign in with a
+password or with Google, and have the role reasserted at every sign-in (ADR-0042). The console
+therefore refuses to change or delete them, and says why rather than showing a dead control.
+`ADMIN_EMAILS` adds addresses per deployment; it cannot remove those two.

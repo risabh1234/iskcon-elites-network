@@ -6,7 +6,7 @@ import { env } from '@/server/env';
  * client in src/lib/s3.ts is configured but unused (docs/AUDIT.md §8), and
  * Phase 7 migrates this to R2 + Cloudflare Images. Only this file changes.
  */
-const BUCKET = 'profiles';
+export const BUCKET = 'profiles';
 
 function client() {
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -30,6 +30,32 @@ export async function putObject(
 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(key);
   return data.publicUrl;
+}
+
+/** Removes the stored object. Failure is the caller's to tolerate. */
+export async function deleteObject(key: string): Promise<void> {
+  const { error } = await client().storage.from(BUCKET).remove([key]);
+  if (error) throw new Error(error.message);
+}
+
+export type NewAsset = {
+  key: string;
+  bucket: string;
+  mime: string;
+  bytes: number;
+  uploadedById: string;
+};
+
+/**
+ * The database record for a stored object.
+ *
+ * Until now nothing wrote this table, so the media console listed rows that
+ * could never exist and an uploaded file had no owner, no size and no way to
+ * be found again. Every upload records one.
+ */
+export async function createAsset(asset: NewAsset): Promise<{ id: string }> {
+  const { default: prisma } = await import('@/lib/prisma');
+  return prisma.mediaAsset.create({ data: asset, select: { id: true } });
 }
 
 /** Assets recorded in the database, for the admin media view. */

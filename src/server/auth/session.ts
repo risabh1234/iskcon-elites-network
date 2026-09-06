@@ -99,6 +99,20 @@ export async function touchSession(sessionId: string, expiresAt: Date): Promise<
     .catch(() => {});
 }
 
+/**
+ * Scope for the session cookie.
+ *
+ * Unset by default, which makes the cookie host-only — the narrowest thing that
+ * works, and the right default on a single domain. It is widened to a parent
+ * domain (".example.org") only when the console runs on its own subdomain and
+ * one sign-in has to cover both; widening it shares the session with every
+ * subdomain of that parent, so it is opt-in and never inferred.
+ */
+function cookieDomain(): string | undefined {
+  const configured = process.env.SESSION_COOKIE_DOMAIN?.trim();
+  return configured && configured.length > 0 ? configured : undefined;
+}
+
 export async function setSessionCookie(token: string): Promise<void> {
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -107,12 +121,15 @@ export async function setSessionCookie(token: string): Promise<void> {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
+    domain: cookieDomain(),
     maxAge: SESSION_DAYS * 24 * 60 * 60,
   });
 }
 
 export async function clearSessionCookie(): Promise<void> {
-  (await cookies()).delete(SESSION_COOKIE);
+  // The domain must match the one it was set with, or the delete silently
+  // misses and the user stays signed in after clicking sign out.
+  (await cookies()).delete({ name: SESSION_COOKIE, path: '/', domain: cookieDomain() });
 }
 
 /** Signs out: deletes the row so the token is dead even if the cookie survives. */

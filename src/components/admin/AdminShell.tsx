@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  CalendarDays, FileText, Image as ImageIcon, ScrollText, Users, UserSquare,
+  CalendarDays, FileText, Image as ImageIcon, Landmark, ScrollText, Users, UserSquare,
 } from 'lucide-react';
 import { Command, ToastProvider, useCommandShortcut } from '@/components/primitives';
 import { Container } from '@/components/patterns';
@@ -14,6 +14,7 @@ export const SECTIONS = [
   { href: '/admin/members', label: 'Members', icon: UserSquare },
   { href: '/admin/events', label: 'Events', icon: CalendarDays },
   { href: '/admin/stories', label: 'Stories', icon: FileText },
+  { href: '/admin/leadership', label: 'Leadership', icon: Landmark },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/media', label: 'Media', icon: ImageIcon },
   { href: '/admin/audit', label: 'Audit', icon: ScrollText },

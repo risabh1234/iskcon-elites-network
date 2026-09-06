@@ -39,6 +39,11 @@ export type Action =
   | 'event:create'
   | 'event:update'
   | 'event:delete'
+  // Leadership
+  | 'leadership:read'
+  | 'leadership:read:unpublished'
+  | 'leadership:update'
+  | 'leadership:media:manage'
   // Stories
   | 'story:read'
   | 'story:create'
@@ -69,6 +74,12 @@ export type Resource = {
   targetRole?: Role;
   /** Internal User.id of the user being acted upon. */
   targetUserId?: string;
+  /**
+   * True when the user being acted upon is a designated administrator
+   * (src/server/administrators.ts). Passed in rather than looked up, so `can()`
+   * stays pure — the caller knows the email, this module must not need to.
+   */
+  targetIsProtected?: boolean;
 };
 
 const isAdmin = (role: Role) => role === 'ADMIN' || role === 'SUPERADMIN';
@@ -84,6 +95,7 @@ export function can(actor: Actor, action: Action, resource: Resource = {}): bool
       case 'member:read':
       case 'event:read':
       case 'story:read':
+      case 'leadership:read':
         return resource.isPublished !== false;
       default:
         return false;
@@ -129,6 +141,18 @@ export function can(actor: Actor, action: Action, resource: Resource = {}): bool
       // events — the previous code let it delete anything. Admins still can.
       return admin || (canCreateEvents && owns);
 
+    // ── Leadership ───────────────────────────────────────────────────────
+    // Ownership is deliberately absent: a leadership profile speaks for the
+    // institution, so there is no "my own" version of it to edit. Reviewers
+    // maintain it or nobody does.
+    case 'leadership:read':
+      return resource.isPublished !== false || admin;
+
+    case 'leadership:read:unpublished':
+    case 'leadership:update':
+    case 'leadership:media:manage':
+      return admin;
+
     // ── Stories ──────────────────────────────────────────────────────────
     case 'story:read':
       return resource.isPublished !== false || admin;
@@ -160,6 +184,10 @@ export function can(actor: Actor, action: Action, resource: Resource = {}): bool
       // Nobody edits their own role: it is the one change that can silently
       // lock the institution out of its own console.
       if (resource.targetUserId === id) return false;
+      // A designated administrator's role is reasserted at their next sign-in,
+      // so allowing the change here would produce a console that appears to
+      // work and quietly undoes itself.
+      if (resource.targetIsProtected) return false;
       // Only a SUPERADMIN may act on a SUPERADMIN.
       if (resource.targetRole === 'SUPERADMIN' && role !== 'SUPERADMIN') return false;
       return true;
@@ -168,6 +196,7 @@ export function can(actor: Actor, action: Action, resource: Resource = {}): bool
     case 'user:delete': {
       if (!admin) return false;
       if (resource.targetUserId === id) return false;
+      if (resource.targetIsProtected) return false;
       if (resource.targetRole === 'SUPERADMIN' && role !== 'SUPERADMIN') return false;
       return true;
     }

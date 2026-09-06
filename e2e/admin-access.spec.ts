@@ -12,6 +12,8 @@ const ADMIN_ROUTES = [
   '/admin/members',
   '/admin/events',
   '/admin/stories',
+  '/admin/leadership',
+  '/admin/leadership/new',
   '/admin/users',
   '/admin/media',
   '/admin/audit',

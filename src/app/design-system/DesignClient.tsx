@@ -11,8 +11,8 @@ import {
   TooltipProvider, useCommandShortcut, useToast,
 } from '@/components/primitives';
 import {
-  EmptyState, ErrorState, EventCard, FilterBar, MemberCard, PageHeader, Prose,
-  Section, StoryCard,
+  EmptyState, ErrorState, EventCard, FilterBar, LeaderProfile, MediaShelf, MemberCard,
+  PageHeader, Prose, Section, StoryCard,
 } from '@/components/patterns';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -291,6 +291,36 @@ export function DesignClient() {
 
           <Row label="ErrorState">
             <ErrorState className="w-full" onRetry={() => {}} reference="a1b2c3d4" />
+          </Row>
+
+          {/* Shown without a portrait or photographs: both render remote images
+              from the storage bucket, which the gallery has no access to. The
+              no-portrait state is the one worth reviewing anyway — it is what a
+              profile looks like the moment it is created. */}
+          <Row label="LeaderProfile — no portrait">
+            <LeaderProfile
+              className="w-full"
+              displayName="His Grace Tukaram Das"
+              role="Vice President, ISKCON Bhubaneswar"
+              headline="Travelling monk and preacher; disciple of His Holiness Bhakti Charu Swami Mahārāja"
+              paragraphs={[
+                'A disciple of His Holiness Bhakti Charu Swami Mahārāja, serving as Vice President of ISKCON Bhubaneswar.',
+                'An eloquent speaker whose particular gift is presenting Vedic knowledge in a lucid, practical form.',
+              ]}
+              focusAreas={['Jagannātha-kathā', 'Gauḍīya Vaiṣṇava siddhānta']}
+              initiatives={['Jindal–Bhaktivedanta Library and Study Centre']}
+            />
+          </Row>
+
+          <Row label="MediaShelf — documents">
+            <MediaShelf
+              className="w-full"
+              photos={[]}
+              documents={[
+                { id: 'd1', title: 'Seminar handout — Śrī Caitanya-caritāmṛta', description: 'Ten pages, printed for the November gathering.', url: '#', bytes: 2_517_842 },
+                { id: 'd2', title: 'Annual report', description: null, url: '#', bytes: 486_000 },
+              ]}
+            />
           </Row>
 
           <Row label="Prose">

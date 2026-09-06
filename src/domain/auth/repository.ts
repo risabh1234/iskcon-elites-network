@@ -54,6 +54,23 @@ export async function isFirstUser(): Promise<boolean> {
   return (await prisma.user.count()) === 0;
 }
 
+/**
+ * Restores a designated administrator's role, and writes nothing when it is
+ * already correct — this runs on every one of their sign-ins.
+ *
+ * `updateMany` here is scoped by primary key. The unscoped `updateMany` the
+ * Phase 0 audit found (docs/AUDIT.md §6) promoted every user in the database;
+ * the `where` is the entire difference and is why this is not a bare `update`:
+ * the role condition is what keeps it from writing on every request.
+ */
+export async function restoreSuperadmin(userId: string): Promise<boolean> {
+  const { count } = await prisma.user.updateMany({
+    where: { id: userId, NOT: { role: 'SUPERADMIN' } },
+    data: { role: 'SUPERADMIN', canCreateEvents: true },
+  });
+  return count > 0;
+}
+
 export async function promoteToSuperadmin(userId: string): Promise<void> {
   await prisma.user.update({
     where: { id: userId },

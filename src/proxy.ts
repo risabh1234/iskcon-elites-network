@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { SESSION_COOKIE } from '@/server/auth/session';
+import { hostOf, resolveHostRouting } from '@/server/hosting';
 
 const ADMIN = /^\/(admin|api\/admin)(\/|$)/;
 const DEV_ONLY = /^\/design-system(\/|$)/;
@@ -54,6 +55,22 @@ function contentSecurityPolicy(nonce: string, isDev: boolean): string {
  */
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Host policy first: if the console lives on its own subdomain, deciding
+  // WHICH site this request belongs to has to happen before anything reasons
+  // about the path. No-op until NEXT_PUBLIC_ADMIN_HOST is set.
+  const routing = resolveHostRouting({
+    host: req.headers.get('host'),
+    pathname,
+    search: req.nextUrl.search,
+    protocol: (req.headers.get('x-forwarded-proto') ?? req.nextUrl.protocol.replace(':', '')) || 'https',
+    adminHost: process.env.NEXT_PUBLIC_ADMIN_HOST ?? null,
+    siteHost: hostOf(process.env.NEXT_PUBLIC_SITE_URL),
+  });
+
+  if (routing.kind === 'redirect') {
+    return NextResponse.redirect(routing.url, routing.permanent ? 308 : 307);
+  }
 
   if (DEV_ONLY.test(pathname)) {
     return process.env.NODE_ENV === 'production'

@@ -48,6 +48,12 @@ export default function AboutPage() {
             register.
           </p>
 
+          <h2>Who stands behind it</h2>
+          <p>
+            The register is not anonymous. The people responsible for it are named, with what they
+            do and what they have built — see <Link href="/leadership">leadership</Link>.
+          </p>
+
           <h2>What it is not</h2>
           <p>
             It is not a social network, a fundraising list, or a place to advertise. There is no

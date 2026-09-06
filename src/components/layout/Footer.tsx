@@ -17,6 +17,7 @@ const NAVIGATE = [
 
 const READ = [
   { href: '/success-stories', label: 'Stories' },
+  { href: '/leadership', label: 'Leadership' },
   { href: '/about', label: 'About the register' },
 ] as const;
 
