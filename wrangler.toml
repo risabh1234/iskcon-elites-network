@@ -11,4 +11,9 @@ binding = "ASSETS"
 binding = "WORKER_SELF_REFERENCE"
 service = "iskcon-elites-network"
 [observability]
-enabled = false
+enabled = true
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "04e1ff894ffd42188624efb652c18659"
+localConnectionString = "postgresql://postgres.czgybxyroxlqqhyxrqhe:Y4T%25XjQt%40p!h.ds@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"

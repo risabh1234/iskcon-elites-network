@@ -1,23 +1,62 @@
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
-// Validates the environment as a side effect of this import, so a missing or
-// malformed variable fails at boot rather than as an opaque error under load.
+import { PrismaClient } from '@prisma/client/wasm';
 import { env } from '@/server/env';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-const pool = new Pool({ connectionString: env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
+let cachedClient: PrismaClient | null = null;
+let cachedConnectionString: string | null = null;
 
-const prismaClientSingleton = () => {
- return new PrismaClient({ adapter });
-};
+function getClient(): PrismaClient {
+  let connectionString = env.DATABASE_URL;
 
-declare const globalThis: {
- prismaGlobal: ReturnType<typeof prismaClientSingleton>;
-} & typeof global;
+  const cfGlobal = (globalThis as unknown as { [k: symbol]: { env?: { HYPERDRIVE?: { connectionString?: string } } } })[Symbol.for('__cloudflare-context__')];
+  console.log('CF context check:', {
+    hasGlobal: !!cfGlobal,
+    hasEnv: !!cfGlobal?.env,
+    hasHyperdrive: !!cfGlobal?.env?.HYPERDRIVE,
+    hyperdriveConn: cfGlobal?.env?.HYPERDRIVE?.connectionString ? 'exists' : 'missing',
+  });
 
-const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
+  if (cfGlobal?.env?.HYPERDRIVE?.connectionString) {
+    connectionString = cfGlobal.env.HYPERDRIVE.connectionString;
+  } else {
+    try {
+      const cf = getCloudflareContext();
+      if (cf?.env && (cf.env as unknown as { HYPERDRIVE?: { connectionString?: string } }).HYPERDRIVE?.connectionString) {
+        connectionString = (cf.env as unknown as { HYPERDRIVE: { connectionString: string } }).HYPERDRIVE.connectionString;
+      }
+    } catch (err) {
+      console.log('getCloudflareContext error:', (err as Error)?.message);
+    }
+  }
+
+  if (cachedClient && cachedConnectionString === connectionString) {
+    return cachedClient;
+  }
+
+  const pool = new Pool({
+    connectionString,
+    maxUses: 1,
+  });
+  const adapter = new PrismaPg(pool);
+  const client = new PrismaClient({ adapter });
+
+  cachedClient = client;
+  cachedConnectionString = connectionString;
+
+  return client;
+}
+
+const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const client = getClient();
+    const value = Reflect.get(client, prop, receiver);
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    return value;
+  },
+});
 
 export default prisma;
-
-if (env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma;

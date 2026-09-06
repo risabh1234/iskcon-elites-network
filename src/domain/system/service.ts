@@ -18,7 +18,8 @@ export async function checkHealth(): Promise<HealthReport> {
   try {
     await repo.ping();
     return { status: 'ok', checks: { database: 'ok' }, latencyMs: Date.now() - startedAt };
-  } catch {
+  } catch (err) {
+    console.error('Database health ping error stack:', err instanceof Error ? err.stack : err);
     return {
       status: 'degraded',
       checks: { database: 'unreachable' },

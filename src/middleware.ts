@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { SESSION_COOKIE } from '@/server/auth/session';
 import { hostOf, resolveHostRouting } from '@/server/hosting';
+
+const SESSION_COOKIE = 'ien_session';
 
 const ADMIN = /^\/(admin|api\/admin)(\/|$)/;
 const DEV_ONLY = /^\/design-system(\/|$)/;
@@ -53,7 +54,7 @@ function contentSecurityPolicy(nonce: string, isDev: boolean): string {
  * here would mean a database round trip on every request. The control is
  * `can(actor, 'admin:access')` in the admin layout (ADR-0029).
  */
-export function proxy(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Host policy first: if the console lives on its own subdomain, deciding

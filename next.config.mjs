@@ -10,6 +10,7 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+ serverExternalPackages: ['@prisma/client', '.prisma/client', 'pg', 'pg-cloudflare'],
  reactStrictMode: true,
  images: {
  formats: ['image/avif', 'image/webp'],
