@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { normaliseEnvValue } from './env-value';
+import { describeEnvValue, normaliseEnvValue } from './env-value';
 
 /**
  * Environment validation. Imported for its side effect by src/lib/prisma.ts, so
@@ -73,11 +73,20 @@ const clientSchema = z.object({
  * Next inlines `process.env.NEXT_PUBLIC_*` at build time only where it appears
  * literally, so client keys are read by their full name rather than destructured.
  */
-const rawClient = {
-  NEXT_PUBLIC_SUPABASE_URL: normaliseEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL),
-  NEXT_PUBLIC_SITE_URL: normaliseEnvValue(process.env.NEXT_PUBLIC_SITE_URL),
-  NEXT_PUBLIC_ADMIN_HOST: normaliseEnvValue(process.env.NEXT_PUBLIC_ADMIN_HOST),
+const rawClientOriginal = {
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+  NEXT_PUBLIC_ADMIN_HOST: process.env.NEXT_PUBLIC_ADMIN_HOST,
 };
+
+/**
+ * The originals are kept alongside the cleaned values purely so a failure can
+ * report what was supplied. Diagnosing a paste error needs the characters that
+ * were removed, which is exactly what normalisation throws away.
+ */
+const rawClient = Object.fromEntries(
+  Object.entries(rawClientOriginal).map(([key, value]) => [key, normaliseEnvValue(value)]),
+) as Record<keyof typeof rawClientOriginal, string | undefined>;
 
 /** The same normalisation, over every variable the server schema declares. */
 function rawServer(): Record<string, unknown> {
@@ -89,8 +98,22 @@ function rawServer(): Record<string, unknown> {
   return out;
 }
 
-function format(issues: z.core.$ZodIssue[]): string {
-  return issues.map((i) => `  • ${i.path.join('.') || '(root)'}: ${i.message}`).join('\n');
+/**
+ * One line per problem, each carrying what the process actually read.
+ *
+ * The value is the whole point. The variable being complained about lives in a
+ * dashboard on someone else's machine, so a bare "Invalid URL" leaves the
+ * reader guessing at precisely the characters that do not render — quotes,
+ * whitespace, a zero-width space. `describeEnvValue` prints public values and
+ * describes secret ones.
+ */
+function format(issues: z.core.$ZodIssue[], raw: (key: string) => string | undefined): string {
+  return issues
+    .map((issue) => {
+      const key = issue.path.join('.') || '(root)';
+      return `  • ${key}: ${issue.message}\n      ${describeEnvValue(key, raw(key))}`;
+    })
+    .join('\n');
 }
 
 function load() {
@@ -107,8 +130,13 @@ function load() {
   ];
 
   if (issues.length > 0) {
+    const raw = (key: string) =>
+      key in rawClientOriginal
+        ? (rawClientOriginal as Record<string, string | undefined>)[key]
+        : (process.env as Record<string, string | undefined>)[key];
+
     throw new Error(
-      `Invalid environment configuration:\n${format(issues)}\n\n` +
+      `Invalid environment configuration:\n${format(issues, raw)}\n\n` +
         `A URL must include its scheme — https://x.supabase.co, not x.supabase.co.\n` +
         `Quotes and stray whitespace are stripped for you, so a value copied\n` +
         `straight out of .env.local into a dashboard field is safe to paste.\n\n` +

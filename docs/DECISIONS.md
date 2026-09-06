@@ -587,3 +587,15 @@ The error message now names both pitfalls.
 It is a separate module from `env.ts` because `env.ts` validates on import and throws: a pure string
 helper must not be reachable only through a module that can refuse to load, which is also what makes
 it testable.
+
+**Amended the same day.** Stripping ASCII quotes did not fix the build, which proved the diagnosis
+incomplete rather than wrong: `Invalid URL` names the rule that failed and never the value that
+failed it, so each guess cost a full CI round trip. The validator now prints what the process
+actually read. `NEXT_PUBLIC_*` values are shown in full — they are compiled into the JavaScript
+every visitor downloads, so a build log discloses nothing — and every other value is described by
+length and diagnosis only, so a paste error in a connection string is identifiable without the
+password appearing in the log. Quote stripping was extended to typographic pairs (“ ” ‘ ’ « ») and
+zero-width characters, all of which render identically to nothing in a dashboard field.
+
+The general rule this is an instance of: a validator that rejects a value without showing it has
+failed at its only job, because the reader cannot see the input and cannot see what was read.
