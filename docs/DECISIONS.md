@@ -599,3 +599,25 @@ zero-width characters, all of which render identically to nothing in a dashboard
 
 The general rule this is an instance of: a validator that rejects a value without showing it has
 failed at its only job, because the reader cannot see the input and cannot see what was read.
+
+**Amended again, and the second amendment was itself the incident.** The diagnostic worked — it
+revealed that `NEXT_PUBLIC_SUPABASE_URL` held four variables pasted into one dashboard field, one of
+which was a Supabase `service_role` key. It revealed this by printing the value into a CI log,
+because the rule was "`NEXT_PUBLIC_*` values are public by construction, so printing one discloses
+nothing".
+
+That reasoning is wrong, and the way it is wrong is worth keeping: **a variable's name says where it
+is meant to go, never what it contains.** A correctly set public variable is public. A misconfigured
+one is an arbitrary string that a human pasted, and humans paste secrets. The classification is an
+intention, not a property of the data.
+
+Redaction is therefore by content and applies to every value regardless of schema: JWTs, anything
+introduced as `…KEY=`/`SECRET=`/`TOKEN=`/`PASSWORD=`, and credentials embedded in a connection
+string, all replaced before anything is printed, with the preview capped at 60 characters and
+non-public variables still never previewed at all. `SEVERAL VARIABLES PASTED INTO ONE FIELD` is
+called out by name, because it is the diagnosis that a truncated preview would otherwise hide.
+
+Had that build succeeded rather than failed, the `service_role` key would have been compiled into
+the JavaScript bundle served to every visitor — the validator refusing to boot is the only reason it
+was not. That is the argument for validating the environment at module load, restated: it failed
+closed on a misconfiguration that no test would have caught.
