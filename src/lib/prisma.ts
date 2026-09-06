@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client/wasm';
+import { PrismaClient } from '@prisma/client';
 import { env } from '@/server/env';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
@@ -10,24 +10,19 @@ let cachedConnectionString: string | null = null;
 function getClient(): PrismaClient {
   let connectionString = env.DATABASE_URL;
 
+  const isCloudflare = typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers';
   const cfGlobal = (globalThis as unknown as { [k: symbol]: { env?: { HYPERDRIVE?: { connectionString?: string } } } })[Symbol.for('__cloudflare-context__')];
-  console.log('CF context check:', {
-    hasGlobal: !!cfGlobal,
-    hasEnv: !!cfGlobal?.env,
-    hasHyperdrive: !!cfGlobal?.env?.HYPERDRIVE,
-    hyperdriveConn: cfGlobal?.env?.HYPERDRIVE?.connectionString ? 'exists' : 'missing',
-  });
 
   if (cfGlobal?.env?.HYPERDRIVE?.connectionString) {
     connectionString = cfGlobal.env.HYPERDRIVE.connectionString;
-  } else {
+  } else if (isCloudflare) {
     try {
       const cf = getCloudflareContext();
       if (cf?.env && (cf.env as unknown as { HYPERDRIVE?: { connectionString?: string } }).HYPERDRIVE?.connectionString) {
         connectionString = (cf.env as unknown as { HYPERDRIVE: { connectionString: string } }).HYPERDRIVE.connectionString;
       }
-    } catch (err) {
-      console.log('getCloudflareContext error:', (err as Error)?.message);
+    } catch {
+      // Ignored outside Cloudflare request context
     }
   }
 
